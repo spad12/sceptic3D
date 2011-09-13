@@ -1,0 +1,20 @@
+We need to bring the following over to the gpu code
+
+Particle data:
+	real xp(6,npartmax) -> velocity and position data.
+	real vzinit(npartmax)
+	real dtprec(npartmax)
+	int ipf(npartmax)
+	
+Gird data:
+	real phi(nr,nth,npsi)
+	real phiaxis(nth,npsi)
+	real rho(nr,nth,npsi)
+	real rhoDiag(nr,nth,npsi)
+	
+Meshes
+	r(nr), rcc(nr)
+	th(nth), tcc(nth)
+	thang(nth)
+	pcc(npsi)
+	int irpre(nrpre), itpre(ntpre), ippre(nppre)
