@@ -2,9 +2,23 @@
 
 c***********************************************************************
 c Interpolate onto the theta mesh. Return nearest index, fraction in thf.
-      integer function interpth(ct,thf)
-      include 'piccom.f'
-      include 'errcom.f'
+      integer function interpth(th,itpre,tfac,nthsize,ct,thf)
+c      include 'piccom.f'
+c      include 'errcom.f'
+
+      implicit none
+
+      real tfac
+      integer nthsize
+      real th(0:nthsize)
+      integer itpre(4*nthsize)
+
+      integer ithl,NTHFULL
+      real ct,thf
+
+
+      NTHFULL = nthsize
+
       ithl=itpre(1+int((ct-th(1))*tfac))
       thf=(ct-th(ithl))/(th(ithl+1)-th(ithl))
       if(thf.gt.1.)then
@@ -20,10 +34,26 @@ c Interpolate onto the theta mesh. Return nearest index, fraction in thf.
       end
 c***********************************************************************
 c Interpolate onto the psi mesh. Return nearest index, fraction in pf.
-      integer function interppsi(sp,cp,pf)
-      include 'piccom.f'
-      include 'errcom.f'
+      integer function interppsi(pcc,ippre,pfac,npsisize,sp,cp,pf)
+c      include 'piccom.f'
+c      include 'errcom.f'
+
+      implicit none
+
       real psi
+
+      real pfac
+      integer npsisize
+      real pcc(0:npsisize)
+      integer ippre(4*npsisize)
+
+      real sp,cp,pf
+      integer ipl,NPSIFULL
+
+      real pi
+      parameter (pi=3.1415927)
+
+      NPSIFULL = npsisize
 
       psi=atan2(sp,cp)
       if(psi.lt.0) psi=psi+2*pi
@@ -561,7 +591,12 @@ c     conservation is false for non-symmetric situations.
 
       ih=0
       hf=66.
-      call ptomesh(i,il,rf,ith,tf,ipl,pf,st,ct,sp,cp,rp
+      call ptomesh(xp,r,th,pcc,irpre,itpre,ippre
+     $     ,zeta,zetahalf
+     $     ,rfac,tfac,pfac
+     $     ,npartmax,ndim
+     $     ,nr,nth,npsi,nrsize,nthsize,npsisize,nrpre,ntpre,nppre
+     $     ,i,il,rf,ith,tf,ipl,pf,st,ct,sp,cp,rp
      $     ,zetap,ih,hf)
 
       rn=sqrt(xp(1,i)**2+xp(2,i)**2+xp(3,i)**2)
@@ -613,7 +648,12 @@ c     conservation is false for non-symmetric situations.
 
       ih=0
       hf=66.
-      call ptomesh(i,il,rf,ith,tf,ipl,pf,st,ct,sp,cp,rp
+      call ptomesh(xp,r,th,pcc,irpre,itpre,ippre
+     $     ,zeta,zetahalf
+     $     ,rfac,tfac,pfac
+     $     ,npartmax,ndim
+     $     ,nr,nth,npsi,nrsize,nthsize,npsisize,nrpre,ntpre,nppre
+     $     ,i,il,rf,ith,tf,ipl,pf,st,ct,sp,cp,rp
      $     ,zetap,ih,hf)
 
       phihere=(phi(il,ith,ipl)*(1.-tf)+phi(il,ith+1,ipl)*tf)*(1.-rf) +

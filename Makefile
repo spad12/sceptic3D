@@ -76,7 +76,8 @@ OPTCOMPMPIHDF += -DMPI
 
 # Objects common to all versions of sceptic3D
 OBJ := initiate.o \
-       advancing.o \
+       advancing_encapsulated.o \
+       advancing_interface.o \
        randc.o \
        randf.o \
        diags.o \

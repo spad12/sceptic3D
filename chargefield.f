@@ -1,8 +1,64 @@
 
-      subroutine chargetomesh()
+      subroutine chargetomesh(xp,ipf,
+     $      r,th,pcc,irpre,itpre,ippre,
+     $      zeta,zetahalf,
+     $      psum,vrsum,vr2sum,vtsum,vpsum,
+     $      vt2sum,vp2sum,vrtsum,vrpsum,
+     $      vtpsum,vxsum,vysum,vzsum,
+     $      rfac,tfac,pfac,
+     $      debyelen,
+     $      diags,samp,iocprev,
+     $      npartmax,ndim,
+     $      nr,nth,npsi,
+     $      nrsize,nthsize,npsisize,
+     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
+
+      implicit none
 c Common data:
-      include 'piccom.f'
-      include 'errcom.f'
+c      include 'piccom.f'
+c      include 'errcom.f'
+
+c      argument list
+
+      integer npartmax,ndim
+      integer nr,nth,npsi,nrsize,nthsize,npsisize
+      integer nrused,nthused,npsiused
+      integer nrpre,ntpre,nppre
+      real rfac,tfac,pfac
+      real xp(ndim,npartmax)
+      real ipf(npartmax)
+      real r(0:nrsize)
+      real th(0:nthsize)
+      real pcc(0:npsisize)
+      integer irpre(nrpre),itpre(ntpre),ippre(nppre)
+      real zeta(0:nrsize+1),zetahalf(0:nrsize+1)
+
+
+      real psum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vrsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vtsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vpsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vr2sum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vt2sum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vp2sum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vrtsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vrpsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vtpsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vxsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vysum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vzsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+
+      real debyelen
+      logical diags,samp
+      integer iocprev
+
+
+
+
+
+c Local variables
+      integer i,j,k,ih,ipl,irl,ithl
+      real cp,ct,hf,pf,rf,rp,sp,st,thf,zetap
 
 c      ninner=0
 
@@ -68,15 +124,27 @@ c Use fast ptomesh, half-quantities not needed.
             ih=0
             hf=99.
            
-            call ptomesh(i,irl,rf,ithl,thf,ipl,pf,st,ct,sp,cp,rp
+            call ptomesh(xp,r,th,pcc,irpre,itpre,ippre
+     $     ,zeta,zetahalf
+     $     ,rfac,tfac,pfac
+     $     ,npartmax,ndim
+     $     ,nr,nth,npsi,nrsize,nthsize,npsisize,nrpre,ntpre,nppre
+     $      ,i,irl,rf,ithl,thf,ipl,pf,st,ct,sp,cp,rp
      $           ,zetap,ih,hf)
             if(rf.lt.0..or.rf.gt.1.)then
                rp=sqrt(xp(1,i)**2+xp(2,i)**2+xp(3,i)**2)
                write(*,*)'Outside mesh, rf error in chargetomesh',
      $              rf,irl,i,rp
             else
-               call chargeassign(i,irl,rf,ithl,thf,
-     $              ipl,pf,st,ct,sp,cp,rp)
+               call chargeassign(xp,
+     $                     psum,vrsum,vr2sum,vtsum,vpsum,
+     $                     vt2sum,vp2sum,vrtsum,vrpsum,
+     $                     vtpsum,vxsum,vysum,vzsum,
+     $                     debyelen,
+     $                     diags,samp,
+     $                     npartmax,ndim,
+     $                     nrsize,nthsize,npsisize,npsi,
+     $                     i,irl,rf,ithl,thf,ipl,pf,st,ct,sp,cp,rp)
 
             endif
          endif
@@ -89,15 +157,68 @@ c      enddo
       end
 c***********************************************************************
 c Accumulate particle charge into rho mesh and other diagnostics.
-      subroutine chargeassign(i,irl,rf,ithl,thf,ipl,pf,st,ct,sp,cp,rp)
-c      implicit none
-      integer i
+      subroutine chargeassign(xp,
+     $      psum,vrsum,vr2sum,vtsum,vpsum,
+     $      vt2sum,vp2sum,vrtsum,vrpsum,
+     $      vtpsum,vxsum,vysum,vzsum,
+     $      debyelen,
+     $      diags,samp,
+     $      npartmax,ndim,
+     $      nrsize,nthsize,npsisize,npsi,
+     $      i,irl,rf,ithl,thf,ipl,pf,st,ct,sp,cp,rp)
+
+c     chargeassign(xp,
+c     $      psum,vrsum,vr2sum,vtsum,vpsum,
+c     $      vt2sum,vp2sum,vrtsum,vrpsum,
+c     $      vtpsum,vxsum,vysum,vzsum,
+c     $      debyelen,
+c     $      diags,samp,
+c     $      npartmax,ndim,
+c     $      nrsize,nthsize,npsisize,npsi,
+c     $      i,irl,rf,ithl,thf,ipl,pf,st,ct,sp,cp,rp)
+
+      implicit none
+
 c Common data:
-      include 'piccom.f'
-      include 'errcom.f'
+c      include 'piccom.f'
+c      include 'errcom.f'
+
+
+
+
+c  Arguments
+
+      integer npartmax,ndim
+      integer nrsize,nthsize,npsisize,npsi
+
+      real xp(ndim,npartmax)
+
+      real psum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vrsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vtsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vpsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vr2sum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vt2sum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vp2sum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vrtsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vrpsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vtpsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vxsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vysum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+      real vzsum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
+
+      real debyelen
+      logical diags,samp
+
+
+      integer i,irl,ithl,ipl
+      real rf,thf,pf,st,ct,sp,cp,rp
+
+c  Local Data
+      integer iplp
+      real vp,vp2,vr,vr2,vrp,vrt,vt,vtp,vt2,vx,vxy,vy,vz
 
 c Cyclic ipl in the poloidal direction
-      integer iplp
       if(ipl.eq.npsi) then
          iplp=1
       else 
@@ -628,7 +749,13 @@ c      write(*,'(10f7.4)')((phi(i,ih),i=0,9),ih=0,9)
       end
 c***********************************************************************
 c cic version.
-      subroutine getaccel(i,accel,il,rf,ith,tf,ipl,pf,
+      subroutine getaccel(xp,phi,
+     $    r,th,thang,pcc,zeta,
+     $    npartmax,ndim,np,
+     $    nr,nth,npsiused,nrsize,nthsize,npsisize,
+     $    bdyfc,debyelen,
+     $    lap0,lat0,
+     $     i,accel,il,rf,ith,tf,ipl,pf,
      $     st,ct,sp,cp,rp,zetap,ih,hf)
 c Evaluate the cartesian acceleration into accel. Using half-mesh
 c parameters.
@@ -636,11 +763,29 @@ c accel is minus the gradient of phi for the ith particle.
 c Be careful with variables in this routine.
 
       implicit none
+
+      integer npartmax,ndim,np,nr,nth,npsiused
+      integer nrsize,nthsize,npsisize
+
+
+      real xp(ndim,npartmax)
+      real phi(0:nrsize,0:nthsize,0:npsisize)
+
+      real r(0:nrsize)
+      real th(0:nthsize)
+      real thang(0:nthsize)
+      real pcc(0:npsisize)
+      real zeta(0:nrsize+1)
+
+      real bdyfc,debyelen
+
+      logical lap0,lat0
+
       integer i
       real accel(3)
 c Common data:
-      include 'piccom.f'
-      include 'errcom.f'
+c      include 'piccom.f'
+c      include 'errcom.f'
 c Radial, Theta and Phi accelerations
       real ar,at,ap
       real ct,st,cp,sp,rp
@@ -673,6 +818,9 @@ c Radial, Theta and Phi accelerations
       real phih1tX,phih1pX,phih1mX,phih12X
 
       real sinhere,sinplus
+
+      real pi
+      parameter (pi=3.1415927)
 
       data dp/0./
 

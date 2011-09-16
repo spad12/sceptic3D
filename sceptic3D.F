@@ -411,7 +411,19 @@ c Need to reset i to avoid problems at RhoDiag ... initialization
       i=0
       samp=.true.
 c Assign charge to mesh
-      call chargetomesh()      
+      call chargetomesh(xp,ipf,
+     $      r,th,pcc,irpre,itpre,ippre,
+     $      zeta,zetahalf,
+     $      psum,vrsum,vr2sum,vtsum,vpsum,
+     $      vt2sum,vp2sum,vrtsum,vrpsum,
+     $      vtpsum,vxsum,vysum,vzsum,
+     $      rfac,tfac,pfac,
+     $      debyelen,
+     $      diags,samp,iocprev,
+     $      npartmax,ndim,
+     $      nr,nth,npsi,
+     $      nrsize,nthsize,npsisize,
+     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
 c Collect the partial sums of moments of distribution.
       call sumreduce()
 
@@ -482,7 +494,7 @@ c     As a result the last plot is only saved if it is on the maxsteps step.
 
 c     If the flag orbinit is on, then we force the tracked particles to
 c     have the following properties.
-         if (myid.eq.0.and.i.eq.trackinit.and.orbinit) then 
+         if (myid.eq.0.and.i.eq.trackinit.and.orbinit) then
             h=1./2*rmax
             do k=1,norbits
                iorbitlen(k)=0
@@ -500,7 +512,19 @@ c     have the following properties.
          if(i.eq.maxsteps)call pfset(ipfsw)
 
 c Assign charge to mesh
-         call chargetomesh()
+         call chargetomesh(xp,ipf,
+     $      r,th,pcc,irpre,itpre,ippre,
+     $      zeta,zetahalf,
+     $      psum,vrsum,vr2sum,vtsum,vpsum,
+     $      vt2sum,vp2sum,vrtsum,vrpsum,
+     $      vtpsum,vxsum,vysum,vzsum,
+     $      rfac,tfac,pfac,
+     $      debyelen,
+     $      diags,samp,iocprev,
+     $      npartmax,ndim,
+     $      nr,nth,npsi,
+     $      nrsize,nthsize,npsisize,
+     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
 
 c Collect the partial sums of moments of distribution.
 #ifdef MPI
@@ -806,7 +830,19 @@ c Average various fluxes and fields:
 
       diags=.true.
 
-      call chargetomesh()
+      call chargetomesh(xp,ipf,
+     $      r,th,pcc,irpre,itpre,ippre,
+     $      zeta,zetahalf,
+     $      psum,vrsum,vr2sum,vtsum,vpsum,
+     $      vt2sum,vp2sum,vrtsum,vrpsum,
+     $      vtpsum,vxsum,vysum,vzsum,
+     $      rfac,tfac,pfac,
+     $      debyelen,
+     $      diags,samp,iocprev,
+     $      npartmax,ndim,
+     $      nr,nth,npsi,
+     $      nrsize,nthsize,npsisize,
+     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
   
       call sumreduce()
 
