@@ -35,6 +35,11 @@ c Grid dimensions
       intparams(12) = nQth
 
 
+      icurrreinject = npreinject
+
+      call orbitreinjectgen(xpreinject,npreinject,icurrreinject,dtin)
+
+
 
       call padvnc2(xp,vzinit,dtprec,ipf,
      $      phi,phiaxis,rho,rhoDiag,

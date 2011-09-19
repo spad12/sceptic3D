@@ -232,3 +232,49 @@ c Data necessary for the orbit tracking
       logical orbinit
       integer maxsteps,trackinit
       common /orbtrack/orbinit,maxsteps,trackinit
+
+c*********************************************************************
+c Data necessary for the orbit tracking
+      integer npreinject
+      integer icurrreinject
+      parameter(npreinject=npartmax/100)
+      real xpreinject(ndim,npreinject)
+      common /reinjectcom/icurrreinject,xpreinject
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

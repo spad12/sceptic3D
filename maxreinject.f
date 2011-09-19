@@ -6,13 +6,16 @@ c The adiabatic reinjection is considerent as a restriction of the 3D one,
 c So that we only have 1 maxinjinit for the 3D case.
 
 
-      subroutine maxreinject(i,dt)
+      subroutine maxreinject(xpin,npartin,i,dt)
 
       integer i
       real dt,sd,temp
 c Common data:
       include 'piccom.f'
       include 'errcom.f'
+
+      integer npartin
+      real xpin(ndim,npartin)
 
       vscale=sqrt(Ti)
       vdi=vd/vscale
@@ -105,27 +108,27 @@ c then a distribution with standard deviation sqrt(Ti/mi) is obtained
 c from the unit variance random distribution multiplied by sqrt(Ti)=vscale.
 
 c Here we consider the drift to be in the z-direction
-      xp(6,i)=(vr*ct - vt*st)*vscale
-      xp(5,i)=((vr*st+ vt*ct)*sp + vp*cp)*vscale
-      xp(4,i)=((vr*st+ vt*ct)*cp - vp*sp)*vscale
+      xpin(6,i)=(vr*ct - vt*st)*vscale
+      xpin(5,i)=((vr*st+ vt*ct)*sp + vp*cp)*vscale
+      xpin(4,i)=((vr*st+ vt*ct)*cp - vp*sp)*vscale
 
       rs=-r(nr)*0.99999
-      xp(3,i)=rs*ct
-      xp(2,i)=(rs*st)*sp
-      xp(1,i)=(rs*st)*cp
+      xpin(3,i)=rs*ct
+      xpin(2,i)=(rs*st)*sp
+      xpin(1,i)=(rs*st)*cp
 
 c Rotate the drift/position to the right direction
-c      write(*,*) (xp(iw,i),iw=1,6)
+c      write(*,*) (xpin(iw,i),iw=1,6)
       sd=sqrt(1-cd**2)
-      temp=xp(2,i)
-      xp(2,i)=temp*cd+xp(3,i)*sd
-      xp(3,i)=-temp*sd+xp(3,i)*cd
-      temp=xp(5,i)
-      xp(5,i)=temp*cd+xp(6,i)*sd
-      xp(6,i)=-temp*sd+xp(6,i)*cd
+      temp=xpin(2,i)
+      xpin(2,i)=temp*cd+xpin(3,i)*sd
+      xpin(3,i)=-temp*sd+xpin(3,i)*cd
+      temp=xpin(5,i)
+      xpin(5,i)=temp*cd+xpin(6,i)*sd
+      xpin(6,i)=-temp*sd+xpin(6,i)*cd
       
-      rcyl=xp(1,i)**2+xp(2,i)**2
-      rp=rcyl+xp(3,i)**2
+      rcyl=xpin(1,i)**2+xpin(2,i)**2
+      rp=rcyl+xpin(3,i)**2
 
 c Do the outer flux accumulation.
       spotrein=spotrein+phihere

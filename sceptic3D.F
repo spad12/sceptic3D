@@ -470,6 +470,8 @@ c     Timing
          write(*,*) "Maxsteps : ",maxsteps
       endif
 
+      icurrreinject = npreinject
+
 c Main Stepping loop.
       do i=1,maxsteps
          

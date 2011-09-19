@@ -620,7 +620,7 @@ c We left. If we haven't exhausted complement, restart particle i.
             if(nrein.lt.ninjcomp) then
 
 
-               call reinject(i,dtin,icolntype,bcr)
+               call reinject(i,dtin)
 
                ipf(i)=1
                zmout=zmout+xp(6,i)
@@ -738,7 +738,7 @@ c            write(*,*)'Reinjecting empty slot',i
 
 c Still need to work on here.
 
-            call reinject(i,dtin,icolntype,bcr)
+            call reinject(i,dtin)
             dtprec(i)=dtin
             ipf(i)=1
             iocthis=i
