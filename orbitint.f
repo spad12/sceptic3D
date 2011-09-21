@@ -162,7 +162,7 @@ c
       call finit()
       if(diagrho(1).eq.999.)then
 c         initialize to set averein
-         call reinject(1,dt,icolntype,bcr)
+         call maxreinject(xp,npartmax,1,dt,)
       else
          averein=vprobe/rmax
       endif
@@ -197,7 +197,7 @@ c         vdist(i)=0.
       write(*,*)'Doing ',ninjects,' injections. Type=',icolntype
       do k=1,ninjects
          kp=1+mod(k-1,npartmax)
-         call reinject(kp,dt,icolntype,bcr)
+         call reinject(xp,npartmax,kp,dt)
 c         write(*,501)(xp(j,kp),j=1,6)
 c 501  format('Pos=',3f10.4,' Vel=',3f10.4)
          ct=xp(3,kp)/sqrt(xp(1,kp)**2+xp(2,kp)**2+xp(3,kp)**2)

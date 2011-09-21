@@ -132,7 +132,7 @@ c      write(*,*) (xpin(iw,i),iw=1,6)
 
 c Do the outer flux accumulation.
       spotrein=spotrein+phihere
-      nrein=nrein+1
+c      nrein=nrein+1
 
 
 c Direct ic1 usage

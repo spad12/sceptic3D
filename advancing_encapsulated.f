@@ -235,7 +235,7 @@ c          if(mod(i,1000).eq.0) write(*,'(i1,$)')isubcycle
 c If prior step was ended by a collision, restart the particle velocity.
 
             if(lcstep)then
-               call postcollide(xp,vneutral,ndim,npartmax,i,tisq)
+c               call postcollide(xp,vneutral,ndim,npartmax,i,tisq)
                lcstep=.false.
 c     Because postcollide selects the velocity and the position at the
 c     same time, we need to set dtprec to zero, in order to offset v and
@@ -466,7 +466,8 @@ c     We left the computational domain
 c     Rewind time to get the right velocities at the domain exit. Assume
 c     that the particle left the domain at a random time during the last
 c     time-step.
-               dtl=-ran0(idum)*dt
+c               dtl=-ran0(idum)*dt
+               dtl=-dt
 
 
 
@@ -620,7 +621,7 @@ c We left. If we haven't exhausted complement, restart particle i.
             if(nrein.lt.ninjcomp) then
 
 
-               call reinject(i,dtin)
+               call reinject(i)
 
                ipf(i)=1
                zmout=zmout+xp(6,i)
@@ -654,7 +655,8 @@ c     The ion is reinjected with v and x synchronized. We set dtprec to
 c     zero to offset v and x by half a timestep
                dtprec(i)=0
 c     Call the timestep fraction-remaining random.
-               remdt=dtin*ran0(idum)
+c               remdt=dtin*ran0(idum)
+                 remdt=dtin
 
 c     Try to use the real remaining time for remdt (remember dtl is negative)
 c     I think it's wrong
@@ -738,7 +740,7 @@ c            write(*,*)'Reinjecting empty slot',i
 
 c Still need to work on here.
 
-            call reinject(i,dtin)
+            call reinject(i)
             dtprec(i)=dtin
             ipf(i)=1
             iocthis=i

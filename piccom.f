@@ -2,7 +2,7 @@
       integer npartmax,npart,nr,nth,npsi,ndim,np
 c Number of particles: npartmax, radial and theta mesh size: nr, nth.
 c Don't change anything else.
-      parameter (npartmax=400000,np=1,ndim=6)
+      parameter (npartmax=900000,np=1,ndim=6)
 c Use of particle advance subcycling in inner regions for accuracy.
       logical lsubcycle
 c Integrator type. True=old, False=new symplectic schemes
@@ -237,9 +237,10 @@ c*********************************************************************
 c Data necessary for the orbit tracking
       integer npreinject
       integer icurrreinject
-      parameter(npreinject=npartmax/100)
+      integer ilastgen
+      parameter(npreinject=npartmax/10)
       real xpreinject(ndim,npreinject)
-      common /reinjectcom/icurrreinject,xpreinject
+      common /reinjectcom/icurrreinject,xpreinject,ilastgen
 
 
 

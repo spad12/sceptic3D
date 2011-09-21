@@ -2,16 +2,17 @@
 c***********************************************************************
 c General version allows choice of reinjection scheme.
 c***********************************************************************
-      subroutine reinject(i,dt)
+      subroutine reinject(i)
 
+      implicit none
 c Common data:
       include 'piccom.f'
       include 'errcom.f'
 
-      integer j
+      integer j,i
+      real dt
 
       if(icurrreinject.gt.npreinject)then
-         print*,'REINJECT icurr too big'
          icurrreinject = 1
       endif
 
@@ -20,7 +21,8 @@ c Common data:
          xp(j,i) = xpreinject(j,icurrreinject)
       enddo
 
-      icurrreinject = icurrreinject + 1
+      nrein=nrein+1
+      icurrreinject=icurrreinject+1
 
 c      call maxreinject(xp,npartmax,i,dt)
 
@@ -46,17 +48,62 @@ c         call oinjinit()
 c      endif
       end
 
-      subroutine orbitreinjectgen(xpreinject,npreinject,icurr,dt)
 
+      subroutine orbitreinjectgen(xpreinject,npreinject,icurr,
+     $      ilastgen,dt)
+
+      implicit none
+
+      integer npreinject,icurr,ilastgen
+      real dt
       real xpreinject(6,npreinject)
+      integer i,j
 
-      if(icurr.gt.1)then
 
-         do i=1,icurr
+      do i=1,icurr
+         call maxreinject(xpreinject,npreinject,i,dt)
+      enddo
+
+      icurr = 1
+
+      end
+
+
+      subroutine orbitreinjectgen2(xpreinject,npreinject,icurr,
+     $      ilastgen,dt)
+
+      implicit none
+
+      integer npreinject,icurr,ilastgen
+      real dt
+      real xpreinject(6,npreinject)
+      integer i,j
+
+
+      if(((icurr-1)-ilastgen).lt.0) then
+
+         if(ilastgen.lt.npreinject) then
+            do i=ilastgen,npreinject
+               call maxreinject(xpreinject,npreinject,i,dt)
+            enddo
+         endif
+
+         if((icurr-1).gt.0) then
+            do i=1,(icurr-1)
+               call maxreinject(xpreinject,npreinject,i,dt)
+            enddo
+         endif
+
+
+         ilastgen = icurr-1
+      else if(((icurr-1)-(ilastgen)).gt.0) then
+
+         do i=ilastgen,(icurr-1)
             call maxreinject(xpreinject,npreinject,i,dt)
          enddo
 
-         icurr = 1
+
+         ilastgen = icurr-1
 
       endif
 

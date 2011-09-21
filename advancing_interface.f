@@ -35,9 +35,16 @@ c Grid dimensions
       intparams(12) = nQth
 
 
-      icurrreinject = npreinject
 
-      call orbitreinjectgen(xpreinject,npreinject,icurrreinject,dtin)
+      print*,ilastgen,icurrreinject
+      call orbitreinjectgen2(xpreinject,npreinject,icurrreinject,
+     $         ilastgen,dtin)
+
+      if(step.eq.1)then
+         ilastgen = 1
+         icurrreinject = 1
+      endif
+
 
 
 
