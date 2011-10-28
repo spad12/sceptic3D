@@ -33,6 +33,8 @@ c     Variables used for calculating matrix A for debugging
      $  outputvect(nrsize-1,0:nthsize ,0:npsisize)
       integer n1,n2,n3,m,n,o
 
+      integer*8 GPUXPlist,GPUMesh
+
 
 c Parallel processing MPI options.
 #ifdef MPI
@@ -472,6 +474,8 @@ c     Timing
 
       icurrreinject = npreinject+1
       ilastgen = 1
+c Initialize GPU arrays
+			call initialize_gpu(GPUXPlist,GPUMesh)
 
 c Main Stepping loop.
       do i=1,maxsteps
@@ -515,19 +519,7 @@ c     have the following properties.
          if(i.eq.maxsteps)call pfset(ipfsw)
 
 c Assign charge to mesh
-         call chargetomesh(xp,ipf,
-     $      r,th,pcc,irpre,itpre,ippre,
-     $      zeta,zetahalf,
-     $      psum,vrsum,vr2sum,vtsum,vpsum,
-     $      vt2sum,vp2sum,vrtsum,vrpsum,
-     $      vtpsum,vxsum,vysum,vzsum,
-     $      rfac,tfac,pfac,
-     $      debyelen,
-     $      diags,samp,iocprev,
-     $      npartmax,ndim,
-     $      nr,nth,npsi,
-     $      nrsize,nthsize,npsisize,
-     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
+         call chargetomesh_gpu(GPUXPlist,GPUMesh)
 
 c Collect the partial sums of moments of distribution.
 #ifdef MPI

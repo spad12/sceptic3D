@@ -3,7 +3,6 @@
 
 # Compiler choice.
 
-
 if [ .$COMPILER == . ] ; then
 if [ -x "`which mpif77`" ] ; then
 # By default use mpif77 and if it is base on GNU use nobackslash.
@@ -29,6 +28,8 @@ else
    fi   
 fi
 fi
+
+COMPILER=ifort
 
 
 # Xlib choice.

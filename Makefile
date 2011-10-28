@@ -10,11 +10,25 @@ VERSION := 0.9
 NUMPROC := 8
 
 # Set compilers
-G77 := $(shell ./setcomp f77)
-G77nonmpi := $(shell ./setcomp f77 nonmpi)
-G90 := $(shell ./setcomp f90)
-G90nonmpi := $(shell ./setcomp f90 nonmpi)
+G77 := ifort
+G77nonmpi := ifort
+G90 := ifort
+G90nonmpi := ifort
 
+NVCC		:= /usr/local/cuda/bin/nvcc
+CUDA_INCLUDE_PATH	:= ./cutil
+CUDAFORTRAN_FLAGS := -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -I$(CUDA_INCLUDE_PATH)
+PGPLOT_FLAGS := -L/usr/local/pgplot -lcpgplot -lpgplot -lX11 -lgcc -lm
+PGPLOT_DIR = /usr/local/pgplot/
+NVCCFLAGS	:=  -m64 -O3  -Xptxas -O3 -Xptxas -maxrregcount=40 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc -I$(CUDA_INCLUDE_PATH) 
+CC := icc
+CPP := icpc
+
+NVCC +=  $(NVCCFLAGS) #-L/home/josh/lib -lcutil_x86_64
+
+
+FLIBROOT := /opt/intel/Compiler/11.1/073
+INTEL_LIBS := -L$(FLIBROOT)/lib/intel64 -lifcore -lifport
 # HDF root directory
 #HDFDIR := $(realpath hdf5-1.8.4)
 # realpath not available on loki, so use hack
@@ -30,7 +44,7 @@ DIRACCIS ?= ./accis
 
 
 # Libraries and options to pass to linker
-LIB := -L$(DIRXLIB) -L$(DIRACCIS) -laccisX -lXt -lX11 
+LIB := -L$(DIRXLIB) -L$(DIRACCIS) -laccisX -lXt -lX11 $(CUDAFORTRAN_FLAGS) $(INTEL_LIBS)
 # Show time and memory usage (debugging)
 LIB += -Wl,-stats
 
@@ -44,13 +58,13 @@ LIBHDF += -L$(DIRHDF)/lib -lhdf5hl_fortran -lhdf5_hl \
 
 
 # Options to pass to compiler
-OPTCOMP := -I.
+OPTCOMP := -I. -fPIC -assume no2underscores
 # Show all warnings exept unused variables
-OPTCOMP += -Wall -Wno-unused-variable
+#OPTCOMP += -Wall -Wno-unused-variable
 # Enable optimization
-OPTCOMP += -O2
+#OPTCOMP += -O2
 # Save debugging info
-OPTCOMP += -g
+#OPTCOMP += -g -pg
 # Do bounds check (debugging)
 #OPTCOMP += -ffortran-bounds-check
 # Save profiling information (debugging)
@@ -78,6 +92,10 @@ OPTCOMPMPIHDF += -DMPI
 OBJ := initiate.o \
        advancing_encapsulated.o \
        advancing_interface.o \
+       gpu_init.o \
+       initialize_gpu.o \
+       XPlist_host_functions.o \
+       chargefield_gpu.o \
        randc.o \
        randf.o \
        diags.o \
@@ -160,6 +178,9 @@ fvinject.o : fvinject.f fvcom.f piccom.f errcom.f
 
 %.o : %.F piccom.f errcom.f;
 	$(G77) -c $(OPTCOMP) $*.F
+	
+%.o : %.cu
+	$(NVCC) -c $*.cu
 
 % : %.f
 	$(G77) -o $* $(OPTCOMP) $*.f $(LIB)
@@ -232,4 +253,3 @@ cleanall :
 
 ftnchek :
 	ftnchek -nocheck -nof77 -calltree=text,no-sort -mkhtml -quiet -brief sceptic3D.F *.f
-

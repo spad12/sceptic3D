@@ -11,6 +11,8 @@ c Common data:
 
       integer intparams(30)
 
+      real fparams(10)
+
 c Integer parameters that are in common blocks and need to be passed
       intparams(1) = npartmax
       intparams(2) = npart
@@ -33,6 +35,10 @@ c Grid dimensions
       intparams(10) = nppre
       intparams(11) = nvel
       intparams(12) = nQth
+
+      fparams(1) = rfac
+      fparams(2) = tfac
+      fparams(3) = pfac
 
 
 
