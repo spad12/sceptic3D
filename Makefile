@@ -16,11 +16,11 @@ G90 := ifort
 G90nonmpi := ifort
 
 NVCC		:= /usr/local/cuda/bin/nvcc
-CUDA_INCLUDE_PATH	:= ./cutil
-CUDAFORTRAN_FLAGS := -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -I$(CUDA_INCLUDE_PATH)
+CUDA_INCLUDE_PATH	:= -I./cutil -I/opt/intel/Compiler/11.1/073/include
+CUDAFORTRAN_FLAGS := -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -L./cutil -lcutil_x86_64 -I$(CUDA_INCLUDE_PATH)
 PGPLOT_FLAGS := -L/usr/local/pgplot -lcpgplot -lpgplot -lX11 -lgcc -lm
 PGPLOT_DIR = /usr/local/pgplot/
-NVCCFLAGS	:=  -m64 -O3  -Xptxas -O3 -Xptxas -maxrregcount=40 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc -I$(CUDA_INCLUDE_PATH) 
+NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -pg -ftz=true -prec-div=false -prec-sqrt=false -Xptxas -maxrregcount=60 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc $(CUDA_INCLUDE_PATH) 
 CC := icc
 CPP := icpc
 
@@ -58,7 +58,7 @@ LIBHDF += -L$(DIRHDF)/lib -lhdf5hl_fortran -lhdf5_hl \
 
 
 # Options to pass to compiler
-OPTCOMP := -I. -fPIC -assume no2underscores
+OPTCOMP := -I. -I/opt/intel/Compiler/11.1/073/include -fPIC -assume no2underscores -fp-model precise
 # Show all warnings exept unused variables
 #OPTCOMP += -Wall -Wno-unused-variable
 # Enable optimization
@@ -108,6 +108,9 @@ OBJ := initiate.o \
 OBJ += orbitinject.o \
        extint.o \
        maxreinject.o
+       
+# Objects for GPU testing
+OBJ += gpu_tests.o
 
 # Objects for HDF version of sceptic3D
 OBJHDF := $(OBJ) \

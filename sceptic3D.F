@@ -81,7 +81,7 @@ c Common defaults. Avoid block data.
       Ezext=0.
       bdyfc=4.
       Ti=1.
-      diags=.true.
+      diags=.false.
       samp=.false.
       diagsamp=4
       finaldiags=.true.

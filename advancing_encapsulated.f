@@ -656,7 +656,7 @@ c     zero to offset v and x by half a timestep
                dtprec(i)=0
 c     Call the timestep fraction-remaining random.
 c               remdt=dtin*ran0(idum)
-                 remdt=dtin
+                 remdt=0.5*dtin
 
 c     Try to use the real remaining time for remdt (remember dtl is negative)
 c     I think it's wrong
@@ -936,6 +936,24 @@ c     $        .or. ih.eq.NRFULL)then
          endif
       endif
       end
+
+      subroutine ptomesh_interface(i,irl,rf,ithl,thf,ipl
+     $     ,pf,st,ct,sp,cp,rp
+     $     ,zetap,ih,hf)
+
+      include 'piccom.f'
+      include 'errcom.f'
+
+      call ptomesh(xp,r,th,pcc,irpre,itpre,ippre
+     $     ,zeta,zetahalf
+     $     ,rfac,tfac,pfac
+     $     ,npartmax,ndim
+     $     ,nr,nth,npsi,nrsize,nthsize,npsisize,nrpre,ntpre,nppre
+     $     ,i,irl,rf,ithl,thf,ipl,pf,st,ct,
+     $              sp,cp,rp,zetap,ih,hf)
+
+    	end
+
 
 c****************************************************************** 
 c     Set the finite volumes coefficients for the outer boundary, as

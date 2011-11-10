@@ -155,6 +155,28 @@ c         write(*,*) iw
 c         write(*,*) ((vrsum(iw,jw,kw),jw=1,nthused),kw=1 ,npsiused)
 c      enddo
       end
+
+      subroutine chargetomesh_interface()
+
+      include 'piccom.f'
+      include 'errcom.f'
+
+      call chargetomesh(xp,ipf,
+     $      r,th,pcc,irpre,itpre,ippre,
+     $      zeta,zetahalf,
+     $      psum,vrsum,vr2sum,vtsum,vpsum,
+     $      vt2sum,vp2sum,vrtsum,vrpsum,
+     $      vtpsum,vxsum,vysum,vzsum,
+     $      rfac,tfac,pfac,
+     $      debyelen,
+     $      diags,samp,iocprev,
+     $      npartmax,ndim,
+     $      nr,nth,npsi,
+     $      nrsize,nthsize,npsisize,
+     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
+
+     	end
+
 c***********************************************************************
 c Accumulate particle charge into rho mesh and other diagnostics.
       subroutine chargeassign(xp,

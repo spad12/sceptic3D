@@ -2,7 +2,7 @@
       integer npartmax,npart,nr,nth,npsi,ndim,np
 c Number of particles: npartmax, radial and theta mesh size: nr, nth.
 c Don't change anything else.
-      parameter (npartmax=4096,np=1,ndim=6)
+      parameter (npartmax=8388608,np=1,ndim=6)
 c Use of particle advance subcycling in inner regions for accuracy.
       logical lsubcycle
 c Integrator type. True=old, False=new symplectic schemes
@@ -13,7 +13,7 @@ c CIC definitions
       parameter (LCIC=.true.)
       integer nrsize,nthsize,npsisize
 c These correspond to nrfull, nthfull.and npsifull
-      parameter (nrsize=64,nthsize=64,npsisize=64)
+      parameter (nrsize=65,nthsize=65,npsisize=65)
 c Positions and velocities of particles (6-d phase-space).
       real xp(ndim,npartmax)
       real vzinit(npartmax)
