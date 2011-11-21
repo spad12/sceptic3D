@@ -2,7 +2,7 @@
       integer npartmax,npart,nr,nth,npsi,ndim,np
 c Number of particles: npartmax, radial and theta mesh size: nr, nth.
 c Don't change anything else.
-      parameter (npartmax=8388608,np=1,ndim=6)
+      parameter (npartmax=2**23,np=1,ndim=6)
 c Use of particle advance subcycling in inner regions for accuracy.
       logical lsubcycle
 c Integrator type. True=old, False=new symplectic schemes

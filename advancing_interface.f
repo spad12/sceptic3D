@@ -1,6 +1,7 @@
 
 c Advance the particles
-      subroutine padvnc(dtin,icolntype,colnwt,step,maccel,ierad)
+      subroutine padvnc(GPUXPlist,GPUMesh,
+     $   		dtin,icolntype,colnwt,step,maccel,ierad)
 
       integer step,maccel
       real dt,dtin
@@ -42,8 +43,12 @@ c Grid dimensions
 
 
 
-      print*,ilastgen,icurrreinject
-      call orbitreinjectgen2(xpreinject,npreinject,icurrreinject,
+
+            if(step.eq.1)then
+         ilastgen = 1
+         icurrreinject = npreinject
+      endif
+      call orbitreinjectgen(xpreinject,npreinject,icurrreinject,
      $         ilastgen,dtin)
 
       if(step.eq.1)then
@@ -51,8 +56,11 @@ c Grid dimensions
          icurrreinject = 1
       endif
 
+      !call test_gpu_getaccel(GPUXPlist,GPUMesh,phi)
 
 
+
+			call start_timer(t1)
 
       call padvnc2(xp,vzinit,dtprec,ipf,
      $      phi,phiaxis,rho,rhoDiag,
@@ -75,10 +83,13 @@ c Grid dimensions
      $     ,nvmax,nobsmax,nstepmax,nrein,nreintry,ninner,norbits
      $     ,dtin,icolntype,colnwt,step,maccel,ierad)
 
+			call stop_timer(t1)
 
+			call test_gpu_padvnc(GPUXPlist,GPUMesh,xp,phi,xpreinject,dtin)
 
-
+			!print*,'Fortran reinjected = ',icurrreinject
       end
+
 
 
 

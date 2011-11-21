@@ -136,16 +136,16 @@ distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = /home1/packages/automake/automake-1.9.6/bin/aclocal-1.9 -I /afs/ncsa/projects/hdf/packages/libtool_1.5.14/Linux_2.4/share/aclocal
 ADD_PARALLEL_FILES = no
-AMTAR = ${SHELL} /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4/bin/missing --run tar
+AMTAR = ${SHELL} /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4/bin/missing --run tar
 
 # H5_CFLAGS holds flags that should be used when building hdf5,
 # but which should not be exported to h5cc for building other programs.
 # AM_CFLAGS is an automake construct which should be used by Makefiles 
 # instead of CFLAGS, as CFLAGS is reserved solely for the user to define.
-AM_CFLAGS =  -std=c99 -pedantic -Wall -Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wcast-align -Wwrite-strings -Wconversion -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls -Wnested-externs -Winline -Wno-long-long -Wfloat-equal -Wmissing-format-attribute -Wmissing-noreturn -Wpacked -Wdisabled-optimization -Wformat=2 -Wunreachable-code -Wendif-labels -Wdeclaration-after-statement -Wold-style-definition -Winvalid-pch -Wvariadic-macros -Wnonnull -Winit-self -Wmissing-include-dirs -Wswitch-default -Wswitch-enum -Wunused-macros -Wunsafe-loop-optimizations -Wc++-compat -Wvolatile-register-var -O -fomit-frame-pointer -finline-functions
+AM_CFLAGS =  -std=c99 -pedantic -Wall -Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wcast-align -Wwrite-strings -Wconversion -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls -Wnested-externs -Winline -Wno-long-long -Wfloat-equal -Wmissing-format-attribute -Wmissing-noreturn -Wpacked -Wdisabled-optimization -Wformat=2 -Wunreachable-code -Wendif-labels -Wdeclaration-after-statement -Wold-style-definition -Winvalid-pch -Wvariadic-macros -Wnonnull -Winit-self -Wmissing-include-dirs -Wswitch-default -Wswitch-enum -Wunused-macros -Wunsafe-loop-optimizations -Wc++-compat -Wstrict-overflow -Wlogical-op -Wlarger-than=2048 -Wvla -Wsync-nand -Wframe-larger-than=16384 -Wpacked-bitfield-compat -O -fomit-frame-pointer -finline-functions
 AM_CPPFLAGS = -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 -D_BSD_SOURCE  -D_POSIX_SOURCE   -DNDEBUG -UH5_DEBUG_API
 AM_CXXFLAGS =   
-AM_FCFLAGS =    
+AM_FCFLAGS =   -fPIC  -O3
 AM_LDFLAGS = 
 AM_MAKEFLAGS = 
 AR = ar
@@ -157,19 +157,19 @@ AUTOHEADER = /home1/packages/autoconf/autoconf-2.60/bin/autoheader
 AUTOMAKE = /home1/packages/automake/automake-1.9.6/bin/automake-1.9
 AWK = gawk
 BYTESEX = little-endian
-CC = icc
+CC = gcc
 CCDEPMODE = depmode=gcc3
-CC_VERSION = /usr/bin/gcc (gcc-4.1.2)
+CC_VERSION = /usr/bin/gcc (gcc-4.5.1)
 CFLAGS = 
 CLEARFILEBUF = yes
 CODESTACK = no
-CONFIG_DATE = Sat Sep 10 23:09:00 EDT 2011
+CONFIG_DATE = Thu Nov 10 14:32:14 EST 2011
 CONFIG_MODE = production
-CONFIG_USER = chaako@sceptic.psfc.mit.edu
-CPP = icc -E
+CONFIG_USER = josh@Josh-Desktop
+CPP = gcc -E
 CPPFLAGS = 
 CXX = no
-CXXCPP = icpc -E
+CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
 CXXFLAGS = 
 CYGPATH_W = echo
@@ -187,7 +187,7 @@ ECHO_N = -n
 ECHO_T = 
 EGREP = /bin/grep -E
 EXEEXT = 
-EXTERNAL_FILTERS = deflate(zlib)
+EXTERNAL_FILTERS = 
 
 # Make sure that these variables are exported to the Makefiles
 F9XMODEXT = mod
@@ -196,16 +196,16 @@ F9XSUFFIXFLAG =
 FC = ifort
 FCFLAGS = 
 FCFLAGS_f90 = 
-FCLIBS =  -L/usr/lib/gcc/x86_64-redhat-linux/4.1.2 -L/usr/lib/gcc/x86_64-redhat-linux/4.1.2/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -lgfortranbegin -lgfortran -lm
+FCLIBS =  -L/opt/intel/Compiler/11.1/073/lib/intel64 -L/usr/lib/gcc/x86_64-redhat-linux/4.5.1 -L/usr/lib/gcc/x86_64-redhat-linux/4.5.1/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib/gcc/x86_64-redhat-linux/4.5.1/../../.. -L/lib64 -L/lib -L/usr/lib64 -L/usr/lib -lifport -lifcore -limf -lsvml -lm -lipgo -lirc -lpthread -lirc_s -ldl
 FGREP = /bin/grep -F
 FILTERS = shuffle,fletcher32,nbit,scaleoffset
 FSEARCH_DIRS = 
 GPFS = no
 GREP = /bin/grep
-H5_CFLAGS = -std=c99 -pedantic -Wall -Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wcast-align -Wwrite-strings -Wconversion -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls -Wnested-externs -Winline -Wno-long-long -Wfloat-equal -Wmissing-format-attribute -Wmissing-noreturn -Wpacked -Wdisabled-optimization -Wformat=2 -Wunreachable-code -Wendif-labels -Wdeclaration-after-statement -Wold-style-definition -Winvalid-pch -Wvariadic-macros -Wnonnull -Winit-self -Wmissing-include-dirs -Wswitch-default -Wswitch-enum -Wunused-macros -Wunsafe-loop-optimizations -Wc++-compat -Wvolatile-register-var -O -fomit-frame-pointer -finline-functions
+H5_CFLAGS = -std=c99 -pedantic -Wall -Wextra -Wundef -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wcast-align -Wwrite-strings -Wconversion -Waggregate-return -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls -Wnested-externs -Winline -Wno-long-long -Wfloat-equal -Wmissing-format-attribute -Wmissing-noreturn -Wpacked -Wdisabled-optimization -Wformat=2 -Wunreachable-code -Wendif-labels -Wdeclaration-after-statement -Wold-style-definition -Winvalid-pch -Wvariadic-macros -Wnonnull -Winit-self -Wmissing-include-dirs -Wswitch-default -Wswitch-enum -Wunused-macros -Wunsafe-loop-optimizations -Wc++-compat -Wstrict-overflow -Wlogical-op -Wlarger-than=2048 -Wvla -Wsync-nand -Wframe-larger-than=16384 -Wpacked-bitfield-compat -O -fomit-frame-pointer -finline-functions
 H5_CPPFLAGS = -D_POSIX_SOURCE   -DNDEBUG -UH5_DEBUG_API
 H5_CXXFLAGS =  
-H5_FCFLAGS =  
+H5_FCFLAGS =  -O3
 H5_LONE_COLON = yes
 H5_VERSION = 1.8.4
 HADDR_T = 
@@ -229,7 +229,7 @@ INSTRUMENT_LIBRARY = no
 LD = /usr/bin/ld -m elf_x86_64
 LDFLAGS = 
 LIBOBJS = 
-LIBS =  -lz -lm 
+LIBS =  -lm 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LINUX_LFS = yes
 LIPO = 
@@ -238,7 +238,7 @@ LN_S = ln -s
 LTLIBOBJS = 
 LT_STATIC_EXEC = 
 MAINT = #
-MAKEINFO = ${SHELL} /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4/bin/missing --run makeinfo
+MAKEINFO = ${SHELL} /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4/bin/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
 MPE = no
 MPI_GET_SIZE = 
@@ -261,7 +261,7 @@ PATH_SEPARATOR = :
 PERL = perl
 PTHREAD = 
 RANLIB = ranlib
-ROOT = /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4
+ROOT = /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4
 RUNPARALLEL = 
 RUNSERIAL = 
 R_INTEGER = 
@@ -281,8 +281,8 @@ THREADSAFE = no
 TIME = time
 TR = /usr/bin/tr
 TRACE_API = no
-UNAME_INFO = Linux sceptic.psfc.mit.edu 2.6.18-194.26.1.el5 #1 SMP Fri Oct 29 14:21:16 EDT 2010 x86_64 x86_64 x86_64 GNU/Linux
-USE_FILTER_DEFLATE = yes
+UNAME_INFO = Linux Josh-Desktop 2.6.35.14-96.fc14.x86_64 #1 SMP Thu Sep 1 11:59:56 UTC 2011 x86_64 x86_64 x86_64 GNU/Linux
+USE_FILTER_DEFLATE = no
 USE_FILTER_FLETCHER32 = yes
 USE_FILTER_NBIT = yes
 USE_FILTER_SCALEOFFSET = yes
@@ -291,10 +291,10 @@ USE_FILTER_SZIP = no
 USINGMEMCHECKER = no
 VERSION = 1.8.4
 WORDS_BIGENDIAN = no
-abs_builddir = /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4
-abs_srcdir = /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4
-abs_top_builddir = /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4
-abs_top_srcdir = /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4
+abs_builddir = /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4
+abs_srcdir = /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4
+abs_top_builddir = /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4
+abs_top_srcdir = /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4
 ac_ct_CC = gcc
 ac_ct_CXX = 
 ac_ct_DUMPBIN = 
@@ -328,7 +328,7 @@ host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4/bin/install-sh
+install_sh = ${SHELL} /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4/bin/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -338,7 +338,7 @@ mandir = ${datarootdir}/man
 mkdir_p = /bin/mkdir -p
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /home/chaako/gitmerge/sceptic3D/hdf5-1.8.4
+prefix = /home/josh/Documents/masters_research/sceptic3Dgpu/hdf5-1.8.4
 program_transform_name = s,x,x,
 psdir = ${docdir}
 sbindir = ${exec_prefix}/sbin

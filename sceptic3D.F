@@ -288,6 +288,8 @@ c Check velocity angle
       endif
 
 c Set Array sizes, allowed variable.
+ 			!call fix_domain_dims(nr,nth,npsi)
+
       if(nr.gt.nrsize-1)then
          write(*,*)'Too many radial points:',nr,'  Set to',nrsize-1
          nr=nrsize-1
@@ -304,6 +306,7 @@ c Set Array sizes, allowed variable.
          write(*,*)'Too many theta points:',nth,'  Set to',nthsize-1
          nth=nthsize-1
       endif
+
       NRUSED=nr
       NTHUSED=nth
       NRFULL=nr+1
@@ -761,7 +764,8 @@ c     default we also evaluate at the probe surface
 
 c     Main particle advance, including collisions.
          
-         call padvnc(dt,icolntype,colnwt,i,maccel,ierad)
+         call padvnc(GPUXPlist,GPUMesh,
+     $ 			dt,icolntype,colnwt,i,maccel,ierad)
 
 
 c     Reduce back the flux and distribution data from the particle advance.

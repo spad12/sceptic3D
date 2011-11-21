@@ -270,7 +270,7 @@ c Except for the first time, find new position.
                ih=1
                hf=77.
 
-               
+
                
                call ptomesh(xp,r,th,pcc,irpre,itpre,ippre
      $     ,zeta,zetahalf
@@ -953,6 +953,30 @@ c     $        .or. ih.eq.NRFULL)then
      $              sp,cp,rp,zetap,ih,hf)
 
     	end
+
+    	subroutine getaccel_interface(i,accel)
+
+    	include 'piccom.f'
+    	include 'errcom.f'
+
+    	call ptomesh(xp,r,th,pcc,irpre,itpre,ippre
+     $     ,zeta,zetahalf
+     $     ,rfac,tfac,pfac
+     $     ,npartmax,ndim
+     $     ,nr,nth,npsi,nrsize,nthsize,npsisize,nrpre,ntpre,nppre
+     $     ,i,il,rf,ith,tf,ipl,pf,st,ct,
+     $              sp,cp,rp,zetap,ih,hf)
+
+      call getaccel(xp,phi,
+     $    r,th,thang,pcc,zeta,
+     $    npartmax,ndim,np,
+     $    nr,nth,npsiused,nrsize,nthsize,npsisize,
+     $    bdyfc,debyelen,
+     $    lap0,lat0,
+     $    i,accel,il,rf,ith,tf,ipl,pf,st,ct,
+     $           sp,cp,rp,zetap,ih,hf)
+
+      end
 
 
 c****************************************************************** 
