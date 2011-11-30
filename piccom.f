@@ -40,10 +40,11 @@ c Highest occupied particle slot.
       logical lfixedn
       integer myid,numprocs
       real rmtoz
+      logical gpurun
       common /piccom/xp,npart,vzinit,dtprec,phi,rho,rhoDiag,cerr,bdyfc
      $     ,Ti,vd,cd,cB,diags,ninjcomp,lplot,ldist,linsulate,lfloat
      $     ,lat0,lap0 ,localinj,lfixedn,myid,numprocs,rmtoz,ipf,iocprev
-     $     ,Bz,lsubcycle,verlet,collcic,phiaxis
+     $     ,Bz,lsubcycle,verlet,collcic,phiaxis,gpurun
 
 
 c *******************************************************************

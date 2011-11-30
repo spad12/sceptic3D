@@ -3,51 +3,25 @@ c Advance the particles
       subroutine padvnc(GPUXPlist,GPUMesh,
      $   		dtin,icolntype,colnwt,step,maccel,ierad)
 
-      integer step,maccel
-      real dt,dtin
+			implicit none
+
+			integer*8 GPUXPlist ! dummy variable to carry pointer to XPdata
+      integer*8 GPUMesh ! dummy variable to carry pointer to mesh_data
+      integer step,maccel,icolntype,ierad
+      real dt,dtin,colnwt
 c Common data:
       include 'piccom.f'
       include 'errcom.f'
       include 'colncom.f'
 
-      integer intparams(30)
-
-      real fparams(10)
-
-c Integer parameters that are in common blocks and need to be passed
-      intparams(1) = npartmax
-      intparams(2) = npart
-      intparams(3) = ndim
-      intparams(4) = np
-
-c Grid dimensions
-      intparams(5) = nr
-      intparams(6) = nth
-      intparams(7) = npsi
-      intparams(8) = nrused
-      intparams(9) = nthused
-      intparams(10) = npsiused
-      intparams(11) = nrfull
-      intparams(12) = nthfull
-      intparams(13) = npsifull
-
-      intparams(8) = nrpre
-      intparams(9) = ntpre
-      intparams(10) = nppre
-      intparams(11) = nvel
-      intparams(12) = nQth
-
-      fparams(1) = rfac
-      fparams(2) = tfac
-      fparams(3) = pfac
 
 
 
-
-            if(step.eq.1)then
+      if(step.eq.1)then
          ilastgen = 1
          icurrreinject = npreinject
       endif
+
       call orbitreinjectgen(xpreinject,npreinject,icurrreinject,
      $         ilastgen,dtin)
 
@@ -60,9 +34,23 @@ c Grid dimensions
 
 
 
-			call start_timer(t1)
 
-      call padvnc2(xp,vzinit,dtprec,ipf,
+
+			if(gpurun)then
+			  icurrreinject = icurrreinject  - 1
+c Call the GPU particle advance
+				call gpu_padvnc(GPUXPlist,GPUMesh,phi,xpreinject,
+     $				dtin,icurrreinject,
+     $				nincell,vrincell,vr2incell,
+     $				xmout,ymout,zmout,
+     $				xmomprobe,ymomprobe,zmomprobe,
+     $				enerprobe,ninner)
+				nrein = icurrreinject+1
+				icurrreinject = icurrreinject + 1
+
+			else
+
+      	 call padvnc2(xp,vzinit,dtprec,ipf,
      $      phi,phiaxis,rho,rhoDiag,
      $      r,rcc,th,thang,pcc,irpre,itpre,ippre
      $     ,zeta,zetahalf
@@ -83,11 +71,15 @@ c Grid dimensions
      $     ,nvmax,nobsmax,nstepmax,nrein,nreintry,ninner,norbits
      $     ,dtin,icolntype,colnwt,step,maccel,ierad)
 
-			call stop_timer(t1)
+      endif
 
-			call test_gpu_padvnc(GPUXPlist,GPUMesh,xp,phi,xpreinject,dtin)
 
-			!print*,'Fortran reinjected = ',icurrreinject
+
+			!call test_gpu_padvnc(GPUXPlist,GPUMesh,xp,phi,xpreinject,dtin)
+c			print*,'Fortran reinjected = ',icurrreinject
+
+
+
       end
 
 

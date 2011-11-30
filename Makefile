@@ -15,6 +15,10 @@ G77nonmpi := ifort
 G90 := ifort
 G90nonmpi := ifort
 
+CC :=icc
+CPP :=icpc
+
+
 NVCC		:= /usr/local/cuda/bin/nvcc
 MKLROOT := /opt/intel/Compiler/11.1/073/mkl
 MKL_LAPACK := -L$(MKLROOT)/lib/em64t -lmkl_solver_lp64_sequential -Wl,--start-group  -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread
@@ -22,10 +26,8 @@ CUDA_INCLUDE_PATH	:= -I./cutil -I/opt/intel/Compiler/11.1/073/include -I/opt/int
 CUDAFORTRAN_FLAGS := -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -L./cutil -lcutil_x86_64 $(MKL_LAPACK) -I$(CUDA_INCLUDE_PATH)
 PGPLOT_FLAGS := -L/usr/local/pgplot -lcpgplot -lpgplot -lX11 -lgcc -lm
 PGPLOT_DIR = /usr/local/pgplot/
-NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -ftz=true -prec-div=false -prec-sqrt=false -Xptxas -maxrregcount=60 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc -Xcompiler -fast $(CUDA_INCLUDE_PATH) 
+NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -ftz=true -prec-div=false -prec-sqrt=false -Xptxas -maxrregcount=60 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin $(CC)  -Xcompiler -fast $(CUDA_INCLUDE_PATH) 
 #NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3  -Xptxas -maxrregcount=40 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc -Xcompiler -fast $(CUDA_INCLUDE_PATH) 
-CC := icc
-CPP := icpc
 
 NVCC +=  $(NVCCFLAGS) #-L/home/josh/lib -lcutil_x86_64
 

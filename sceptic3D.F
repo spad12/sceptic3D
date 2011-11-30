@@ -101,6 +101,7 @@ c Common defaults. Avoid block data.
       rmtoz=1.
       rhomin=0.
       rhomax=0.
+      gpu=.false.
 c     lat0 and lap0 mean that we set the polar or poloidal acceleration
 c     artificially to zero
       lat0=.false.  
@@ -274,6 +275,7 @@ c        For debugging, give option to save A and/or phi
          if(string(1:5) .eq. '--at0') lat0=.true.
          if(string(1:5) .eq. '--ap0') lap0=.true.
          if(string(1:10) .eq. '--localinj') localinj=.true.
+         if(string(1:10) .eq. '--gpurun') gpurun=.true.
         
  1    continue
  3    continue
@@ -313,6 +315,16 @@ c Set Array sizes, allowed variable.
       NTHFULL=nth+1
       NPSIUSED=npsi
       NPSIFULL=npsi+1
+
+c For now we are only going to have 1 MPI Thread use a GPU
+c This is going to be expanded on later so that we can run as many MPI
+c nodes as we want, but only the ones with GPUs will run large particle lists
+			if(gpurun) then
+				 if(myid.gt.0)then
+				 		gpurun=.false.
+				 endif
+			endif
+
 
       
 
@@ -477,9 +489,13 @@ c     Timing
 
       icurrreinject = npreinject+1
       ilastgen = 1
-c Initialize GPU arrays
-			call initialize_gpu(GPUXPlist,GPUMesh)
 
+      if(gpurun)then
+c Initialize GPU arrays
+				call initialize_gpu(GPUXPlist,GPUMesh)
+			endif
+
+      if(myid.eq.0) call start_timer(t1)
 c Main Stepping loop.
       do i=1,maxsteps
          
@@ -522,7 +538,7 @@ c     have the following properties.
          if(i.eq.maxsteps)call pfset(ipfsw)
 
 c Assign charge to mesh
-         call chargetomesh_gpu(GPUXPlist,GPUMesh)
+         call chargetomesh_gpu(GPUXPlist,GPUMesh,i)
 
 c Collect the partial sums of moments of distribution.
 #ifdef MPI
@@ -763,7 +779,6 @@ c     default we also evaluate at the probe surface
 
 
 c     Main particle advance, including collisions.
-         
          call padvnc(GPUXPlist,GPUMesh,
      $ 			dt,icolntype,colnwt,i,maccel,ierad)
 
@@ -800,6 +815,7 @@ c            endif
  504     format(10f8.3) 
       enddo
 c End of particle stepping section.
+			if(myid.eq.0) call stop_timer(t1)
 
       itotsteps=maxsteps
       if(myid.eq.0)then
@@ -829,19 +845,7 @@ c Average various fluxes and fields:
 
       diags=.true.
 
-      call chargetomesh(xp,ipf,
-     $      r,th,pcc,irpre,itpre,ippre,
-     $      zeta,zetahalf,
-     $      psum,vrsum,vr2sum,vtsum,vpsum,
-     $      vt2sum,vp2sum,vrtsum,vrpsum,
-     $      vtpsum,vxsum,vysum,vzsum,
-     $      rfac,tfac,pfac,
-     $      debyelen,
-     $      diags,samp,iocprev,
-     $      npartmax,ndim,
-     $      nr,nth,npsi,
-     $      nrsize,nthsize,npsisize,
-     $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
+			call chargetomesh_gpu(GPUXPlist,GPUMesh,maxsteps)
   
       call sumreduce()
 

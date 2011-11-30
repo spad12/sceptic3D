@@ -295,6 +295,7 @@ c present values: dtnow.
 c               if(dtprec(i).eq.0.)dtprec(i)=dt
 
             dtnow=0.5*(dt+dtprec(i))
+            !write(*,*)'dtnow: i, dtnow',i,dtnow
 
 c     The first way to deal with E^B drift is with a convective
 c     field. Use an other approach
