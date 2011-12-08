@@ -7,12 +7,14 @@ c Advance the particles
 
 			integer*8 GPUXPlist ! dummy variable to carry pointer to XPdata
       integer*8 GPUMesh ! dummy variable to carry pointer to mesh_data
-      integer step,maccel,icolntype,ierad
+      integer step,maccel,icolntype,ierad,timer
       real dt,dtin,colnwt
+      real timeout
 c Common data:
       include 'piccom.f'
       include 'errcom.f'
       include 'colncom.f'
+
 
 
 
@@ -32,8 +34,7 @@ c Common data:
 
       !call test_gpu_getaccel(GPUXPlist,GPUMesh,phi)
 
-
-
+			call start_timer(timer)
 
 
 			if(gpurun)then
@@ -72,6 +73,8 @@ c Call the GPU particle advance
      $     ,dtin,icolntype,colnwt,step,maccel,ierad)
 
       endif
+
+			call stop_timer(padvnct,timer)
 
 
 

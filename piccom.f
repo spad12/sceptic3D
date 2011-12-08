@@ -1,8 +1,8 @@
    
-      integer npartmax,npart,nr,nth,npsi,ndim,np
+      integer npartmax,npart,nr,nth,npsi,ndim,np,nparttotal
 c Number of particles: npartmax, radial and theta mesh size: nr, nth.
 c Don't change anything else.
-      parameter (npartmax=2**23,np=1,ndim=6)
+      parameter (npartmax=(2**24),np=1,ndim=6)
 c Use of particle advance subcycling in inner regions for accuracy.
       logical lsubcycle
 c Integrator type. True=old, False=new symplectic schemes
@@ -44,7 +44,7 @@ c Highest occupied particle slot.
       common /piccom/xp,npart,vzinit,dtprec,phi,rho,rhoDiag,cerr,bdyfc
      $     ,Ti,vd,cd,cB,diags,ninjcomp,lplot,ldist,linsulate,lfloat
      $     ,lat0,lap0 ,localinj,lfixedn,myid,numprocs,rmtoz,ipf,iocprev
-     $     ,Bz,lsubcycle,verlet,collcic,phiaxis,gpurun
+     $     ,Bz,lsubcycle,verlet,collcic,phiaxis,gpurun,nparttotal
 
 
 c *******************************************************************
@@ -243,7 +243,16 @@ c Data necessary for the orbit tracking
       real xpreinject(ndim,npreinject)
       common /reinjectcom/icurrreinject,xpreinject,ilastgen
 
-
+      real padvnct,padvncttot
+      real c2mesht,c2meshttot
+      real totalt,totalttot
+      real fcalct,fcalcttot,rhocalct,rhocalcttot
+      real sumreducet,sumreducettot
+      common /timings/padvnct,padvncttot,
+     $			c2mesht,c2meshttot,totalt,
+     $			totalttot,fcalct,fcalcttot,rhocalct,
+     $			rhocalcttot,sumreducet,
+     $			sumreducettot
 
 
 

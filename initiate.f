@@ -269,7 +269,7 @@ c      enddo
 c      write(*,*)'Initialized ','id=',myid,
 c     $     '  n=',npart,'  ntries=',ntries,'  ntrapped=',ntrapped
 c Initialize rhoinf:
-      rhoinf=numprocs*npart/(4.*pi*r(NRUSED)**3/3.)
+      rhoinf=nparttotal/(4.*pi*r(NRUSED)**3/3.)
 c Initialize orbit tracking
       do ko=1,norbits
          iorbitlen(ko)=0

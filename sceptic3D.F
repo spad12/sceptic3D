@@ -34,6 +34,7 @@ c     Variables used for calculating matrix A for debugging
       integer n1,n2,n3,m,n,o
 
       integer*8 GPUXPlist,GPUMesh
+      real tweight
 
 
 c Parallel processing MPI options.
@@ -101,7 +102,7 @@ c Common defaults. Avoid block data.
       rmtoz=1.
       rhomin=0.
       rhomax=0.
-      gpu=.false.
+      gpurun=.false.
 c     lat0 and lap0 mean that we set the polar or poloidal acceleration
 c     artificially to zero
       lat0=.false.  
@@ -316,16 +317,24 @@ c Set Array sizes, allowed variable.
       NPSIUSED=npsi
       NPSIFULL=npsi+1
 
-c For now we are only going to have 1 MPI Thread use a GPU
-c This is going to be expanded on later so that we can run as many MPI
-c nodes as we want, but only the ones with GPUs will run large particle lists
+#ifdef MPI
+c  Check to see if there is an available GPU for me, or if I'm just a potential solve slave
 			if(gpurun) then
-				 if(myid.gt.0)then
+				 call pick_gpu(myid,npart)
+				 if(npart.eq.0)then
 				 		gpurun=.false.
+				 		npart=npartmax/50
 				 endif
 			endif
+      call MPI_BARRIER(MPI_COMM_WORLD,ierr)
+      call MPI_REDUCE(npart,nparttotal,1,MPI_INTEGER,MPI_SUM,0,
+     $        MPI_COMM_WORLD,ierr)
+		 	call MPI_BCAST(nparttotal,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
 
-
+			if(myid.eq.0) 	print*,"nparttotal = ",nparttotal
+#else
+			nparttotal=npart
+#endif
       
 
       if(.not.ieradset) then
@@ -494,8 +503,15 @@ c     Timing
 c Initialize GPU arrays
 				call initialize_gpu(GPUXPlist,GPUMesh)
 			endif
+#ifdef MPI
+      	call MPI_BARRIER(MPI_COMM_WORLD,ierr)
+#endif
 
-      if(myid.eq.0) call start_timer(t1)
+      if(myid.eq.0) call init_times(t1)
+
+      call inittimes()
+
+      call start_timer(t2)
 c Main Stepping loop.
       do i=1,maxsteps
          
@@ -544,11 +560,12 @@ c Collect the partial sums of moments of distribution.
 #ifdef MPI
       call MPI_BARRIER(MPI_COMM_WORLD,ierr)
 #endif
-      
+      call start_timer(t4)
          call sumreduce()
          call aveupstep()
+      call stop_timer(sumreducet,t4)
 
-        
+      call start_timer(t5)
 c     One step prior to when the momenta are needed, set samp=true so
 c     that chargediag calculates them.
          if(i.ge.(maxsteps-diagsamp*nstepsave)-diagsamp) then
@@ -559,6 +576,7 @@ c     that chargediag calculates them.
                samp=.false.
             endif
          endif
+
 
 c myid.eq.0 for the master node.
          if(myid.eq.0)then
@@ -584,6 +602,8 @@ c     Broadcast back to the slaves.
          endif
 #endif
 
+
+
          if(myid.eq.0) then          
 c Plot the slices through the probe.
             if(lplot) then 
@@ -608,12 +628,15 @@ c     particles diagnostic file right, ie if -w
      $           MPI_COMM_WORLD,ierr)
          endif
 #endif
+
+
+
          if(myid.eq.0) then
 c  Write step information.
             cfinal=' ReinjFrac'
             if(icolntype.gt.0)cfinal=' ColnFreq'
             if(linsulate.or.lfloat)cfinal=' Vprobe'
-            if(mod(i,5).eq.1) then
+            if(mod(i,1000).eq.1) then
                if(i.gt.1)then
                   mtrap=mtrapped()
                   if(linsulate.or.lfloat)then
@@ -662,8 +685,8 @@ c        For debugging: Save Poisson matrices if flag set and small grid
          elseif (i .le. nstepssave) then
             lsavemat = .false.
          endif
-
-
+      call stop_timer(rhocalct,t5)
+			call start_timer(t3)
 c     Calculate the potential field, unless it is fixed.
       if (myid2.eq.0.and.infdbl) then
          call fcalc_infdbl(dt)
@@ -681,6 +704,7 @@ c     Calculate the potential field, unless it is fixed.
          endif
       endif  
 
+
   
 
 c     Broadcast back to the slaves.
@@ -694,6 +718,7 @@ c     Averein is always broadcasted from 0 since it is calculated
 c     in diags, called only by myid=0, not myid2=0
       call MPI_BCAST(averein,1, MPI_REAL,0,MPI_COMM_WORLD,ierr)
 #endif
+
 
 c        For debugging: Save phi for first nstepssave if small grid
          if (lsavephi .and.
@@ -776,7 +801,7 @@ c     default we also evaluate at the probe surface
             ymom(i,lorentz,2)=fby
           
          endif
-
+			call stop_timer(fcalct,t3)
 
 c     Main particle advance, including collisions.
          call padvnc(GPUXPlist,GPUMesh,
@@ -814,8 +839,35 @@ c            endif
  503     format(10f8.1)
  504     format(10f8.3) 
       enddo
+#ifdef MPI
+			call MPI_BARRIER(MPI_COMM_WORLD,ierr)
+#endif
+
+      call stop_timer(totalt,t2)
+
+			tweight=(1.0*npart)/(1.0*nparttotal)
+			tweight = 1.0
+			call adjtimes(padvncttot,padvnct,tweight)
+			call adjtimes(c2meshttot,c2mesht,tweight)
+			call adjtimes(fcalcttot,fcalct,1.0)
+			call adjtimes(sumreducettot,sumreducet,tweight)
+			call adjtimes(rhocalcttot,rhocalct,tweight)
+			call adjtimes(totalttot,totalt,1.0)
+
+      if(myid.eq.0) then
+				write(*,*)
+				write(*,*)'Average Subroutine Run Times(ns) ',
+     $				 'per particle per timestep'
+      	write(*,*) "Average Padvnc Time : ",padvncttot
+      	write(*,*) "Average Chargeassign Time : ",c2meshttot
+      	write(*,*) "Average fcalc Time : ",fcalcttot
+      	write(*,*) "Average sumreduce Time : ",sumreducettot
+      	write(*,*) "Average rhocalc Time : ",rhocalcttot
+      	write(*,*) "Average Total Time : ",totalttot
+      endif
 c End of particle stepping section.
-			if(myid.eq.0) call stop_timer(t1)
+			if(myid.eq.0) call get_times(t1)
+
 
       itotsteps=maxsteps
       if(myid.eq.0)then
@@ -959,7 +1011,8 @@ c We need to divide by the volume corresponding to each.
       if(.not.rhoinf.gt.1.e-4) then
 c Initialize rhoinf approximately:
          write(*,*)'Rhoinf in rhocalc too small',rhoinf
-         rhoinf=numprocs*npart/(4.*pi*r(NRUSED)**3/3.)
+c         rhoinf=numprocs*npart/(4.*pi*r(NRUSED)**3/3.)
+          rhoinf=nparttotal/(4.*pi*r(NRUSED)**3/3.)
          write(*,*)'Rhoinf in rhocalc approximated as',rhoinf
       endif
       do ipsi=1,NPSIUSED

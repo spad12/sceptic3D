@@ -153,7 +153,8 @@ c         write(*,*) 'nrein=0'
             write(*,*)'rhoinf error in chargediag:',rhoinf,
      $           ' approximated.'
 c estimate rhoinf approximately:
-            rhoinf=numprocs*npart/(4.*pi*r(NRUSED)**3/3.)
+c            rhoinf=numprocs*npart/(4.*pi*r(NRUSED)**3/3.)
+             rhoinf=nparttotal/(4.*pi*r(NRUSED)**3/3.)
          endif
          averein=0.
          riest=rhoinf
