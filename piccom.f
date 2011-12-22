@@ -254,7 +254,12 @@ c Data necessary for the orbit tracking
      $			rhocalcttot,sumreducet,
      $			sumreducettot
 
-
+c*********************************************************************
+c GPU object pointers
+			integer*8 GPUPSolve
+			logical test_atimes
+			common /gpucommon/GPUPSolve,
+     $			test_atimes
 
 
 

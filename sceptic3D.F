@@ -720,6 +720,8 @@ c     in diags, called only by myid=0, not myid2=0
 #endif
 
 
+
+
 c        For debugging: Save phi for first nstepssave if small grid
          if (lsavephi .and.
      $     nr .le. nrsizesave .and.

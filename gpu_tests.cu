@@ -2,7 +2,6 @@
 #include "XPlist.cuh"
 
 
-
 extern "C" { void ptomesh_interface_(int &i,int &irl,float &rf,int &ithl,float &thf,
 				int &ipl,float &pf,float &st,float &ct,float &sp,float &cp,float &rp,
 				float &zetap,int &ih,float &hf);}
@@ -450,11 +449,6 @@ extern "C" void test_gpu_padvnc_(long int* XP_ptr,long int* mesh_ptr,
 	free(xp_gpu_temp);
 
 }
-
-
-
-
-
 
 
 

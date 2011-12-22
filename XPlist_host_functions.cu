@@ -7,9 +7,9 @@
 #define SORT_NPTCLS_PER_THREAD 4
 #define CHARGE_ASSIGN_BLOCK_SIZE 512
 #define PADVANCE_BLOCK_SIZE 128
-#define PADVNC_NPTCLS_PER_THREAD 4
+#define PADVNC_NPTCLS_PER_THREAD 8
 
-#define time_run
+//#define time_run
 
 // Use the stupid sort so that we can profile the code
 //#define STUPID_SORT

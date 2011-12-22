@@ -50,7 +50,11 @@ c already been calculated in innerbc.f
             x(1,j,k)=0.
          enddo
       enddo
-
+			if(test_atimes) then
+c			call cg3d_test(GPUPsolve,phi,lbcg,n1,
+c     $				nthused,npsiused,b,x,dconverge,iter,maxits)
+c      test_atimes=.false.
+      endif
 
       call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
 
@@ -274,7 +278,7 @@ c     Main loop
          endif
          
          bkden=bknum
-         call atimes(n1,n2,n3,p,z,.false.)
+         call atimes_gpu(n1,n2,n3,p,z,.false.)
          akden=0.
          do k=1,n3
             do j=1,n2
@@ -356,9 +360,54 @@ c     matrix, returns z=Atilde^-1*b.
 
       error=sqrt(error)
       end
+c **************************************
+			subroutine asolve_gpu(n1,n2,n3,b,z,error)
+
+			include 'piccom.f'
+			include 'errcom.f'
+      real b(nrsize-1,0:nthsize,0:npsisize), z(nrsize-1,0:nthsize
+     $     ,0:npsisize)
+      real error
+      integer n1,n2,n3
+
+      if (test_atimes) then
+				call asolve_test(GPUPsolve,phi,b,z,
+     $			n1,n2,n3)
+			test_atimes = .false.
+			else
+
+			call asolve(n1,n2,n3,b,z,error)
+
+			endif
+
+
+			end
 
 c **************************************
+			subroutine atimes_gpu(n1,n2,n3,x,res,ltrnsp)
 
+			include 'piccom.f'
+			include 'errcom.f'
+			integer n1,n2,n3
+			logical temp
+			real x(nrsize-1,0:nthsize,0:npsisize),res(nrsize-1
+     $			,0:nthsize,0:npsisize)
+
+      if (test_atimes) then
+      	temp = .true.
+				call atimes_test(GPUPsolve,phi,x,res,
+     $			n1,n2,n3,temp)
+			test_atimes = .false.
+			else
+
+			call atimes(n1,n2,n3,x,res,Itrnsp)
+
+			endif
+
+
+			end
+
+c **************************************
       subroutine atimes(n1,n2,n3,x,res,ltrnsp)
 
       include 'piccom.f'
@@ -408,7 +457,9 @@ c             x(i=1)=0, that element doesn't affect the solution
      $        *x(i,j,k)
          enddo
       enddo
-
+c Why have these special cases, why not just set x(:,:,0) = x(:,:,n3) sooo much easier
+c or use kp and km, and for the edge cases set kp or km to the periodic version also easier
+c -- Josh Payne
       k=1
       do j=1,n2
          do i=2,n1-2

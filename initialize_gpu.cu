@@ -14,7 +14,7 @@ extern "C" void pick_gpu_(int* myid,int* mynpart)
 
 	if(*myid < ndevices)
 	{
-		CUDA_SAFE_CALL(cudaSetDevice(my_device));
+		CUDA_SAFE_CALL(cudaSetDevice(1));
 	}
 	else
 	{
@@ -235,4 +235,18 @@ extern "C" void gpu_Distribution_fnct_init()
 {
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

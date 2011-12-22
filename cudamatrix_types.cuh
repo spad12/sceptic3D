@@ -5,6 +5,7 @@
  *      Author: paynej
  */
 
+#ifndef __CUDAMATRIX_TYPES_INCLUDED__
 #include "cudamatrix.cuh"
 
 typedef class matrix4T<double> matrix4d;
@@ -17,3 +18,6 @@ typedef class cudaMatrixT<int2> cudaMatrixi2;
 typedef class cudaMatrixT<int3> cudaMatrixi3;
 typedef class cudaMatrixT<int4> cudaMatrixi4;
 typedef class cudaMatrixT<matrix4d> cudaMatrixM4;
+
+#define __CUDAMATRIX_TYPES_INCLUDED__
+#endif
