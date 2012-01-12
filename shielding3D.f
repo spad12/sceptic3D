@@ -11,6 +11,8 @@ c******************************************************************
      $     ,x(nrsize-1,0:nthsize,0:npsisize)
       integer kk1,kk2
 
+      integer tlbcg,t3
+
 c     Variables used for calculating matrix A for debugging
       real inputvect(nrsize-1,0:nthsize,0:npsisize),
      $  outputvect(nrsize-1,0:nthsize ,0:npsisize)
@@ -50,13 +52,35 @@ c already been calculated in innerbc.f
             x(1,j,k)=0.
          enddo
       enddo
-			if(test_atimes) then
-c			call cg3d_test(GPUPsolve,phi,lbcg,n1,
-c     $				nthused,npsiused,b,x,dconverge,iter,maxits)
-c      test_atimes=.false.
-      endif
 
+c			if(test_atimes.le.test_atimesm) then
+c				if(lbcg) then
+c					tlbcg = 1
+c				else
+c					tlbcg = 0
+c				endif
+
+c				print*,'lbcg =',lbcg
+c			call cg3d_test(GPUPsolve,phi,tlbcg,n1,
+c     $		nthused,npsiused,b,x,dconverge,gpc,iter,maxits)
+c         test_atimes = test_atimes + 1
+c      endif
+
+			if(lbcg) then
+				tlbcg = 1
+			else
+				tlbcg = 0
+			endif
+			call start_timer(t3)
+
+c      call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
+			if(gpurun) then
+				call cg3D_gpu(GPUPsolve,phi,tlbcg,n1,nthused,
+     $			npsiused,b,x,dconverge,gpc,iter,maxits)
+      else
       call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
+      endif
+      call stop_timer(fcalct,t3)
 
 c For debugging, save matrix A and its transpose
       if (lsavemat .and. stepcount.eq.saveatstep) then
@@ -192,9 +216,11 @@ c       so use biconjugate gradient method from Press.
       real eps,delta,deltamax
       parameter (eps=1.e-14)
       real b(nrsize-1,0:nthsize,0:npsisize),x(nrsize-1,0:nthsize
-     $     ,0:npsisize),p(nrsize-1,0:nthsize,0:npsisize),res(nrsize-1
+     $     ,0:npsisize),p(nrsize-1,0:nthsize,0:npsisize)
+     $     ,res(nrsize-1
      $     ,0:nthsize ,0:npsisize),z(nrsize-1,0:nthsize,0:npsisize)
-     $     ,pp(nrsize-1,0:nthsize ,0:npsisize),resr(nrsize-1,0:nthsize
+     $     ,pp(nrsize-1,0:nthsize ,0:npsisize),resr(nrsize-1
+     $     ,0:nthsize
      $     ,0:npsisize),zz(nrsize-1 ,0:nthsize,0:npsisize)
       integer n1,n2,n3
       real tol
@@ -246,6 +272,7 @@ c     Main loop
             do j=1,n2
                do i=2,n1
                   bknum=bknum+z(i,j,k)*resr(i,j,k)
+
                enddo
             enddo
          enddo
@@ -260,7 +287,7 @@ c     Main loop
                      pp(i,j,k)=zz(i,j,k)
                   enddo
                   p(1,j,k)=0.
-                  pp(i,j,k)=0.
+                  pp(1,j,k)=0.
                enddo
             enddo
          else
@@ -278,7 +305,7 @@ c     Main loop
          endif
          
          bkden=bknum
-         call atimes_gpu(n1,n2,n3,p,z,.false.)
+         call atimes(n1,n2,n3,p,z,.false.)
          akden=0.
          do k=1,n3
             do j=1,n2
@@ -305,6 +332,8 @@ c        Give bcg option by using lbcg as transpose flag
                enddo
             enddo
          enddo
+
+c         print*,'bknum, akden, deltamax = ',bknum,akden,deltamax
 
          if(deltamax.ge.tol) then
             call asolve(n1,n2,n3,res,z,error)
@@ -370,15 +399,14 @@ c **************************************
       real error
       integer n1,n2,n3
 
-      if (test_atimes) then
+      if (test_atimes.le.test_atimesm) then
 				call asolve_test(GPUPsolve,phi,b,z,
-     $			n1,n2,n3)
-			test_atimes = .false.
-			else
+     $			gpc,n1,n2,n3)
+			 test_atimes = test_atimes + 1
+			endif
 
 			call asolve(n1,n2,n3,b,z,error)
 
-			endif
 
 
 			end
@@ -393,11 +421,11 @@ c **************************************
 			real x(nrsize-1,0:nthsize,0:npsisize),res(nrsize-1
      $			,0:nthsize,0:npsisize)
 
-      if (test_atimes) then
-      	temp = .true.
+      if (test_atimes.le.test_atimesm) then
+      	temp = .false.
 				call atimes_test(GPUPsolve,phi,x,res,
-     $			n1,n2,n3,temp)
-			test_atimes = .false.
+     $			gpc,n1,n2,n3,temp)
+			 test_atimes = test_atimes + 1
 			else
 
 			call atimes(n1,n2,n3,x,res,Itrnsp)

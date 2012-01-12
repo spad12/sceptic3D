@@ -636,7 +636,7 @@ c  Write step information.
             cfinal=' ReinjFrac'
             if(icolntype.gt.0)cfinal=' ColnFreq'
             if(linsulate.or.lfloat)cfinal=' Vprobe'
-            if(mod(i,1000).eq.1) then
+            if(mod(i,100).eq.1) then
                if(i.gt.1)then
                   mtrap=mtrapped()
                   if(linsulate.or.lfloat)then
@@ -686,7 +686,7 @@ c        For debugging: Save Poisson matrices if flag set and small grid
             lsavemat = .false.
          endif
       call stop_timer(rhocalct,t5)
-			call start_timer(t3)
+
 c     Calculate the potential field, unless it is fixed.
       if (myid2.eq.0.and.infdbl) then
          call fcalc_infdbl(dt)
@@ -695,7 +695,9 @@ c     Calculate the potential field, unless it is fixed.
       else
          call shielding_bc(dt,rshield,icolntype,colnwt)
          if(.not.cgparallel.and.myid2.eq.0) then
+
             call shielding3D(dt,rshield)
+
 #ifdef MPI
          elseif(cgparallel.and.myid2.ge.0) then
             call shielding3D_par(dt,rshield,cg_comm,myid2)
@@ -803,7 +805,6 @@ c     default we also evaluate at the probe surface
             ymom(i,lorentz,2)=fby
           
          endif
-			call stop_timer(fcalct,t3)
 
 c     Main particle advance, including collisions.
          call padvnc(GPUXPlist,GPUMesh,
@@ -840,6 +841,9 @@ c            endif
          time=time+dt
  503     format(10f8.1)
  504     format(10f8.3) 
+
+      	call start_timer(t7)
+ 				call stop_timer(offtime,t7)
       enddo
 #ifdef MPI
 			call MPI_BARRIER(MPI_COMM_WORLD,ierr)

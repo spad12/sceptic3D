@@ -247,19 +247,19 @@ c Data necessary for the orbit tracking
       real c2mesht,c2meshttot
       real totalt,totalttot
       real fcalct,fcalcttot,rhocalct,rhocalcttot
-      real sumreducet,sumreducettot
+      real sumreducet,sumreducettot,offtime
       common /timings/padvnct,padvncttot,
      $			c2mesht,c2meshttot,totalt,
      $			totalttot,fcalct,fcalcttot,rhocalct,
      $			rhocalcttot,sumreducet,
-     $			sumreducettot
+     $			sumreducettot,offtime
 
 c*********************************************************************
 c GPU object pointers
 			integer*8 GPUPSolve
-			logical test_atimes
+			integer test_atimes,test_atimesm
 			common /gpucommon/GPUPSolve,
-     $			test_atimes
+     $			test_atimes,test_atimesm
 
 
 

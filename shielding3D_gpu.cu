@@ -1,6 +1,7 @@
 #include "gpu_solver.cuh"
+#include "XPlist.cuh"
 
-#define ATIMES_DOMAIN_DIM 8
+#define ATIMES_DOMAIN_DIM 4
 
 template<typename T>
 class sMatrixT
@@ -73,10 +74,56 @@ extern "C" {void atimes_(int &n1,int &n2, int &n3,float* x, float* res,uint* itr
 extern "C" {void asolve_(int &n1,int &n2, int &n3,float* b, float* z,float* zerror);}
 extern "C" {void cg3d_(int &n1,int &n2,int &n3,float* b,float* x,float &tol,int &iter,int&itmax);}
 
-extern "C" void gpu_psolver_init_(long int* PsolvPtr,float* apc,float* bpc,float* cpc, float* dpc,float* epc,
+void print_cudaMatrixf(cudaMatrixf M_in,int n1 = 0,int n2 = 0, int n3 = 0)
+{
+	int nx,ny,nz;
+	cudaExtent h_extent;
+
+	h_extent = M_in.getdims();
+
+	nx = h_extent.width/sizeof(float);
+	ny = h_extent.height;
+	nz = h_extent.depth;
+
+	if(n1 != 0)
+		nx = n1;
+
+	if(n2 != 0)
+		ny = n2;
+
+	if(n3 != 0)
+		nz = n3;
+
+	// Allocate host memory
+	float* h_data = (float*)malloc(nx*ny*nz*sizeof(float));
+
+	// Copy gpu data to the cpu
+	M_in.cudaMatrixcpy(h_data,cudaMemcpyDeviceToHost);
+
+	for(int i=0;i<nx;i++)
+	{
+		for(int j=0;j<ny;j++)
+		{
+			for(int k=0;k<nz;k++)
+			{
+				int thid = i+nx*(j+ny*k);
+				printf("M(%i,%i,%i) = %f\n",i,j,k,h_data[thid]);
+			}
+		}
+	}
+
+	free(h_data);
+
+}
+
+extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* apc,float* bpc,float* cpc, float* dpc,float* epc,
 													   float* fpc,float* gpc,int* nrsize,int* nthsize,int* npsisize)
 {
+	Mesh_data mesh_d = *(Mesh_data*)(*mesh_ptr);
 	PoissonSolver* solver = (PoissonSolver*)malloc(sizeof(PoissonSolver));
+
+	solver->phi = mesh_d.phi;
+	solver->rho = mesh_d.rho;
 
 	solver->allocate(*nrsize,*nthsize,*npsisize);
 
@@ -111,7 +158,7 @@ void PoissonSolver::allocate(int nrsize_in,int nthsize_in,int npsisize_in)
 	gpc.cudaMatrix_allocate(nthsize+1,npsisize+1,5);
 
 	x.cudaMatrix_allocate(nrsize-1,nthsize+1,npsisize+1);
-	phi.cudaMatrix_allocate(nrsize+1,nthsize+1,npsisize+1);
+//	phi.cudaMatrix_allocate(nrsize+1,nthsize+1,npsisize+1);
 	z.cudaMatrix_allocate(nrsize-1,nthsize+1,npsisize+1);
 	zz.cudaMatrix_allocate(nrsize-1,nthsize+1,npsisize+1);
 	res.cudaMatrix_allocate(nrsize-1,nthsize+1,npsisize+1);
@@ -137,7 +184,7 @@ void PoissonSolver::psfree(void)
 	gpc.cudaMatrixFree();
 
 	x.cudaMatrixFree();
-	phi.cudaMatrixFree();
+//	phi.cudaMatrixFree();
 	z.cudaMatrixFree();
 	zz.cudaMatrixFree();
 	res.cudaMatrixFree();
@@ -155,7 +202,7 @@ void setup_shared(sMatrixf &apcin,sMatrixf &bpcin,sMatrixf &cpcin,
 							    sMatrixf &gpcin,sMatrixf &expphiin,sMatrixf &xin,
 							    sMatrixf &resin)
 {
-	const int d = ATIMES_DOMAIN_DIM+4;
+	const int d = ATIMES_DOMAIN_DIM+2;
 	__shared__ float apc[d];
 	__shared__ float bpc[d];
 	__shared__ float cpc[d*d];
@@ -211,11 +258,11 @@ void atimes_transp_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf res
 	setup_shared(apcs,bpcs,cpcs,dpcs,epcs,fpcs,gpcs,expphi,x,res);
 
 	// Load all the data into shared memory
-	while((idx < (blockDim.x+4))&&(gidx <= (solver.n1+3)))
+	while((idx < (blockDim.x+2))&&(gidx <= (solver.n1+1)))
 	{
 		idy = threadIdx.y;
 		gidy = bidy+idy;
-		while((idy < (blockDim.y+4))&&(gidy <= (solver.n2+3)))
+		while((idy < (blockDim.y+2))&&(gidy <= (solver.n2+1)))
 		{
 			idz = threadIdx.z;
 			gidz = bidz+idz;
@@ -235,13 +282,13 @@ void atimes_transp_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf res
 
 
 
-			while((idz < (blockDim.z+4))&&(gidz <= (solver.n3+3)))
+			while((idz < (blockDim.z+2))&&(gidz <= (solver.n3+1)))
 			{
 				expphi(idx,idy,idz) = exp(solver.phi(gidx+1,gidy,gidz));
 
 				if(idx < 5) gpcs(idy,idz,idx) = solver.gpc(gidy,gidz,idx);
 
-				if(gidx <= (solver.n1+3))
+				if(gidx <= (solver.n1))
 				{
 					if(gidz == 0)
 					{
@@ -341,17 +388,13 @@ void atimes_transp_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf res
 		}
 	}
 	__syncthreads();
-	if(gidx <= solver.n1)
+	if(gidx < solver.n1)
 	{
 		if(gidy <= solver.n2)
 		{
 			if(gidz <= solver.n3)
 			{
 				 result = res(idx,idy,idz);
-				if(isnan(result))
-				{
-					result = 0.0;
-				}
 				 resin(gidx,gidy,gidz) = result;
 			}
 		}
@@ -434,11 +477,11 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 	setup_shared(apcs,bpcs,cpcs,dpcs,epcs,fpcs,gpcs,expphi,x,res);
 
 	// Load all the data into shared memory
-	while((idx < (blockDim.x+2))&&(gidx <= (solver.n1+3)))
+	while((idx < (blockDim.x+2))&&(gidx <= (solver.n1+1)))
 	{
 		idy = threadIdx.y;
 		gidy = bidy+idy;
-		while((idy < (blockDim.y+2))&&(gidy <= (solver.n2+3)))
+		while((idy < (blockDim.y+2))&&(gidy <= (solver.n2+1)))
 		{
 			idz = threadIdx.z;
 			gidz = bidz+idz;
@@ -458,13 +501,13 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 
 
 
-			while((idz < (blockDim.z+2))&&(gidz <= (solver.n3+3)))
+			while((idz < (blockDim.z+2))&&(gidz <= (solver.n3+1)))
 			{
 				expphi(idx,idy,idz) = exp(solver.phi(gidx+1,gidy,gidz));
 
 				if(idx < 5) gpcs(idy,idz,idx) = solver.gpc(gidy,gidz,idx);
 
-				if(gidx <= (solver.n1+2))
+				if(gidx <= (solver.n1+1))
 				{
 					if(gidz == 0)
 					{
@@ -479,6 +522,10 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 						x(idx,idy,idz) = xin(gidx,gidy,gidz);
 					}
 
+				}
+				else
+				{
+					x(idx,idy,idz) = 0.0;
 				}
 
 				// Do the edge cases, periodic boundary
@@ -505,11 +552,11 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 	gidz = bidz+idz;
 
 	// Bulk loop
-	if((gidz > 0)&&(gidz <= solver.n3+1))
+	if((gidz > 0)&&(gidz <= solver.n3))
 	{
-		if((gidy > 0)&&(gidy <= solver.n2+1))
+		if((gidy > 0)&&(gidy <= solver.n2))
 		{
-			if((gidx > 0)&&(gidx <= (solver.n1)))
+			if((gidx > 0)&&(gidx <= (solver.n1-2)))
 			{
 				res(idx,idy,idz) = apcs(idx)*x(idx+1,idy,idz)
 						+ bpcs(idx)*x(idx-1,idy,idz)
@@ -524,13 +571,13 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 			}
 		}
 	}
-	__syncthreads();
+//	__syncthreads();
 
-	if((gidz > 0)&&(gidz <= solver.n3+1))
+	if((gidz > 0)&&(gidz <= solver.n3))
 	{
-		if((gidy > 0)&&(gidy <= solver.n2+1))
+		if((gidy > 0)&&(gidy <= solver.n2))
 		{
-			if((gidx == (solver.n1+1)))
+			if((gidx == (solver.n1-1)))
 			{
 				x(idx+1,idy,idz) = gpcs(idy,idz,0)*x(idx-1,idy,idz)
 						+ gpcs(idy,idz,1)*x(idx,idy-1,idz)
@@ -555,15 +602,15 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 	gidx = bidx+idx;
 	gidy = bidy+idy;
 	gidz = bidz+idz;
-	if(gidx <= solver.n1+1)
+	if(gidx < solver.n1)
 	{
-		if(gidy <= solver.n2+1)
+		if(gidy <= solver.n2)
 		{
-			if(gidz <= solver.n3+1)
+			if(gidz <= solver.n3)
 			{
 				resin(gidx,gidy,gidz) = res(idx,idy,idz);
 
-				if(gidx == solver.n1-1) xin(gidx+2,gidy,gidz) = x(idx+2,idy,idz);
+				if(gidx == solver.n1-1) xin(gidx+1,gidy,gidz) = x(idx+1,idy,idz);
 
 			}
 		}
@@ -588,23 +635,23 @@ void asolve_kernel(PoissonSolver solver,cudaMatrixf bin,cudaMatrixf zin)
 	{
 		if(gidy <= solver.n2)
 		{
-			if(gidx <= solver.n1)
+			if(gidx < solver.n1-1)
 			{
-				result = bin(gidx,gidy,gidz)/(-solver.fpc(gidx+1,gidy)-exp(solver.phi(gidx+1,gidy,gidz)));
+				result = bin(gidx,gidy,gidz)/(-1*solver.fpc(gidx+1,gidy)-exp(solver.phi(gidx+1,gidy,gidz)));
 				if(isnan(result))
 				{
-					result = 0.0;
+					//result = 0.0;
 				}
 				zin(gidx,gidy,gidz) = result;
 
 			}
-			else if(gidx == solver.n1)
+			else if(gidx == solver.n1-1)
 			{
-				result = bin(gidx,gidy,gidz)/(-solver.fpc(gidx+1,gidy)-exp(solver.phi(gidx+1,gidy,gidz))
+				result = bin(gidx,gidy,gidz)/((-1*solver.fpc(gidx+1,gidy)-exp(solver.phi(gidx+1,gidy,gidz)))
 						+ solver.apc(gidx+1)*solver.gpc(gidy,gidz,4));
 				if(isnan(result))
 				{
-					result = 0.0;
+					//result = 0.0;
 				}
 				zin(gidx,gidy,gidz) = result;
 			}
@@ -627,7 +674,7 @@ void setup_res_kernel(PoissonSolver solver)
 	while(gidy <= solver.n2)
 	{
 		gidx = blockDim.x*blockIdx.x+idx;
-		while(gidx <= solver.n1)
+		while(gidx < solver.n1)
 		{
 
 			res = solver.b(gidx,gidy,gidz)-solver.res(gidx,gidy,gidz);
@@ -660,7 +707,7 @@ void pppp_kernel(PoissonSolver solver)
 
 	float bk;
 
-	if(solver.bkden == 0.0f)
+	if(solver.t_iter == 1)
 	{
 		bk = 0.0;
 	}
@@ -675,20 +722,14 @@ void pppp_kernel(PoissonSolver solver)
 	while(gidy <= solver.n2)
 	{
 		gidx = blockDim.x*blockIdx.x+idx;
-		while(gidx <= solver.n1)
+		while(gidx < solver.n1)
 		{
 
 			result=bk*solver.p(gidx,gidy,gidz)+solver.z(gidx,gidy,gidz);
-			if(isnan(result))
-			{
-				result = 0.0;
-			}
+
 			solver.p(gidx,gidy,gidz) = result;
 			result = bk*solver.pp(gidx,gidy,gidz)+solver.zz(gidx,gidy,gidz);
-			if(isnan(result))
-			{
-				result = 0.0;
-			}
+
 			solver.pp(gidx,gidy,gidz) = result;
 
 			if(gidx == 1)
@@ -697,15 +738,15 @@ void pppp_kernel(PoissonSolver solver)
 				solver.pp(gidx-1,gidy,gidz) = 0;
 			}
 
-			gidx += blockDim.x;
+			gidx += blockDim.x*gridDim.x;
 		}
-		gidy += blockDim.y;
+		gidy += blockDim.y*gridDim.y;
 	}
 
 }
 
 __global__
-void Psolve_reduce_kernel(PoissonSolver solver,const int operation)
+void Psolve_reduce_kernel(PoissonSolver solver,int operation)
 {
 	int idx = threadIdx.x+1;
 	int idy = threadIdx.y+1;
@@ -714,37 +755,40 @@ void Psolve_reduce_kernel(PoissonSolver solver,const int operation)
 	int gidy = blockDim.y*blockIdx.y+idy;
 	int gidz = blockDim.z*blockIdx.z+idz;
 
-	int thid = gidx-1+blockDim.x*(gidy-1+blockDim.y*(gidz-1));
+	int thid = gidx-1+blockDim.x*gridDim.x*(gidy-1+blockDim.y*gridDim.y*(gidz-1));
 
-	float my_val = 0.0;
+	float my_val = 0;
 
 
 	while(gidy <= solver.n2)
 	{
 		gidx = blockDim.x*blockIdx.x+idx;
-		while(gidx <= solver.n1)
+		while(gidx < solver.n1)
 		{
 			 switch(operation)
 			 {
 			 case 0:
-				 my_val = solver.bknum_eval(my_val,gidx,gidy,gidz);
+				 my_val += solver.bknum_eval(gidx,gidy,gidz);
 				// printf("my_val = %f\n",my_val);
 				 break;
 			 case 1:
-				 my_val = solver.aknum_eval(my_val,gidx,gidy,gidz);
+				 my_val += solver.aknum_eval(gidx,gidy,gidz);
 				 break;
 			 case 2:
-				 my_val = solver.delta_eval(my_val,gidx,gidy,gidz);
+				 my_val = max(my_val,solver.delta_eval(gidx,gidy,gidz));
 				 break;
 			 default:
 				 break;
 			 }
 
 
-			gidx += blockDim.x;
+			gidx += blockDim.x*gridDim.x;
 		}
-		gidy += blockDim.y;
+		gidy += blockDim.y*gridDim.y;
 	}
+
+	//if(operation == 0)
+	//	printf("my_va(%i,%i,%i) = %f\n",gidx,gidy,gidz,my_val);
 
 	solver.sum_array[thid] = my_val;
 
@@ -753,12 +797,12 @@ void Psolve_reduce_kernel(PoissonSolver solver,const int operation)
 __host__
 void PoissonSolver::eval_sum(const int operation)
 {
-	dim3 cudaBlockSize(32,16,1);
+	dim3 cudaBlockSize(32,8,1);
 	dim3 cudaGridSize(1,1,n3);
 
-	CUDA_SAFE_CALL(cudaMemset(sum_array,0,512*(npsisize+1)*sizeof(float)));
+	CUDA_SAFE_CALL(cudaMemset(sum_array,0,cudaBlockSize.x*cudaBlockSize.y*(n3)*sizeof(float)));
 
-	float result;
+	float result = 0.0;
 
 	CUDA_SAFE_KERNEL((Psolve_reduce_kernel<<<cudaGridSize,cudaBlockSize>>>(*this,operation)));
 
@@ -766,13 +810,13 @@ void PoissonSolver::eval_sum(const int operation)
 
 	if(operation < 2)
 	{
-		// bknum and
-		result = thrust::reduce(reduce_ptr,reduce_ptr+(n3)*512);
+		// bknum and akden
+		result = thrust::reduce(reduce_ptr,reduce_ptr+(n3)*cudaBlockSize.x*cudaBlockSize.y);
 	}
 	else
 	{
 		// delta is a maximum
-		result = thrust::reduce(reduce_ptr,reduce_ptr+(n3)*512,(float) 0.0,thrust::maximum<float>());
+		result = thrust::reduce(reduce_ptr,reduce_ptr+(n3)*cudaBlockSize.x*cudaBlockSize.y,(float) 0.0,thrust::maximum<float>());
 	}
 
 	 switch(operation)
@@ -784,7 +828,7 @@ void PoissonSolver::eval_sum(const int operation)
 		akden = result;
 		 break;
 	 case 2:
-		 deltamax = max(result,deltamax);
+		 deltamax = result;
 		 break;
 	 default:
 		 break;
@@ -813,15 +857,15 @@ void PoissonSolver::pppp(void)
 __host__
 void PoissonSolver::asolve(int n1_in,int n2_in,int n3_in,cudaMatrixf bin, cudaMatrixf zin)
 {
-	dim3 cudaBlockSize(8,8,8);
+	dim3 cudaBlockSize(ATIMES_DOMAIN_DIM,ATIMES_DOMAIN_DIM,ATIMES_DOMAIN_DIM);
 	dim3 cudaGridSize(1,1,1);
 	n1 = n1_in;
 	n2 = n2_in;
 	n3 = n3_in;
 
-	cudaGridSize.x = (n1+cudaBlockSize.x+4)/cudaBlockSize.x;
-	cudaGridSize.y = (n2+cudaBlockSize.y+4)/cudaBlockSize.y;
-	cudaGridSize.z = (n3+cudaBlockSize.z+4)/cudaBlockSize.z;
+	cudaGridSize.x = (n1+cudaBlockSize.x+1)/cudaBlockSize.x;
+	cudaGridSize.y = (n2+cudaBlockSize.y+1)/cudaBlockSize.y;
+	cudaGridSize.z = (n3+cudaBlockSize.z+1)/cudaBlockSize.z;
 
 	CUDA_SAFE_KERNEL((asolve_kernel<<<cudaGridSize,cudaBlockSize>>>(*this,bin,zin)));
 
@@ -830,15 +874,15 @@ void PoissonSolver::asolve(int n1_in,int n2_in,int n3_in,cudaMatrixf bin, cudaMa
 __host__
 void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMatrixf resin,int itransp)
 {
-	dim3 cudaBlockSize(8,8,8);
+	dim3 cudaBlockSize(ATIMES_DOMAIN_DIM,ATIMES_DOMAIN_DIM,ATIMES_DOMAIN_DIM);
 	dim3 cudaGridSize(1,1,1);
 	n1 = n1_in;
 	n2 = n2_in;
 	n3 = n3_in;
 
-	cudaGridSize.x = (n1+cudaBlockSize.x+4)/cudaBlockSize.x;
-	cudaGridSize.y = (n2+cudaBlockSize.y+4)/cudaBlockSize.y;
-	cudaGridSize.z = (n3+cudaBlockSize.z+4)/cudaBlockSize.z;
+	cudaGridSize.x = (n1+cudaBlockSize.x+1)/cudaBlockSize.x;
+	cudaGridSize.y = (n2+cudaBlockSize.y+1)/cudaBlockSize.y;
+	cudaGridSize.z = (n3+cudaBlockSize.z+1)/cudaBlockSize.z;
 
 
 
@@ -864,18 +908,15 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float* bin,float* xin,flo
 	iter = 0;
 	// Initialize the denominators
 	bknum = 0;
-	bkden = 0.0;
+	bkden = 0;
 	akden = 0;
 	deltamax = tol*1.5f;
-
-	x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
-	b.cudaMatrixcpy(bin,cudaMemcpyHostToDevice);
 
 	atimes(n1,n2,n3,x,res,0);
 
 	setup_res();
-
-	if(lbcg == 0)
+	//printf("lbcg = %i\n",lbcg);
+	if(!lbcg)
 	{
 		atimes(n1,n2,n3,res,resr,0);
 	}
@@ -886,15 +927,16 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float* bin,float* xin,flo
 	while(deltamax >= tol)
 	{
 		iter++;
+		t_iter = iter;
 
-		printf("deltamax = %f\n",deltamax);
+
 		asolve(n1,n2,n3,resr,zz);
-		bknum = 0;
+		bknum = 0.0;
 
 		// evaluate bknum;
 		eval_sum(0);
 
-		//printf("bknum = %f\n",bknum);
+
 
 		// do the p's
 		pppp();
@@ -903,14 +945,14 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float* bin,float* xin,flo
 
 		atimes(n1,n2,n3,p,z,0);
 
-		akden = 0;
+		akden = 0.0;
 
 		// evaluate akden
 		eval_sum(1);
 
 		atimes(n1,n2,n3,pp,zz,lbcg);
 		// set deltamax = 0 so that we can reevaluate it.
-		deltamax = 0;
+		deltamax = 0.0;
 
 		// evaluate deltamax
 		eval_sum(2);
@@ -918,34 +960,63 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float* bin,float* xin,flo
 		if(iter >= itmax)
 			break;
 
-		asolve(n1,n2,n3,res,z);
+//		printf("bknum, akden, deltamax = %f, %f, %f\n",bknum,akden,deltamax,deltamax);
+
+		if(deltamax >= tol)
+			asolve(n1,n2,n3,res,z);
+		else
+			break;
+
+
 	}
 
 
 
-	// copy results back to the cpu
-	x.cudaMatrixcpy(xin,cudaMemcpyDeviceToHost);
-	b.cudaMatrixcpy(bin,cudaMemcpyDeviceToHost);
+
+}
+
+__host__
+void PoissonSolver::shielding3D(float dt, int n1, int n2, int n3,int lbcg)
+{
+	int maxits = 2*pow((float)((n1+1)*n2*n3),0.3333);
+	float dconverge = 1.0e-5;
+
 }
 
 extern "C" void cg3d_gpu_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* n2,int* n3,
-										    float* bin,float* xin,float* tol,int* iter,int* itmax)
+										    float* bin,float* xin,float* tol,float* gpc,int* iter,int* itmax)
 {
 	PoissonSolver* solver;
 
 	solver = ((PoissonSolver*)(*solverPtr));
 
 	solver -> phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
+	solver -> gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
+
+	solver -> x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
+	solver -> b.cudaMatrixcpy(bin,cudaMemcpyHostToDevice);
 
 	solver -> cg3D(*n1,*n2,*n3,bin,xin,*tol,*iter,*itmax,*lbcg);
+
+	// copy results back to the cpu
+	solver -> x.cudaMatrixcpy(xin,cudaMemcpyDeviceToHost);
+
+}
+
+extern "C" void shielding3D_gpu_(long int* solverPtr,float* dt, int* lbcg,int* n1)
+{
+	PoissonSolver* solver;
+
+	solver = ((PoissonSolver*)(*solverPtr));
 
 }
 
 
 
 
+
 extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zin,
-														int* n1,int* n2,int* n3)
+														float* gpc,int* n1,int* n2,int* n3)
 {
 	printf("Executing asolve test\n");
 	PoissonSolver* solver;
@@ -956,8 +1027,9 @@ extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zi
 	int nthsize = solver->nthsize;
 	int npsisize = solver->npsisize;
 
-	float tolerance = 1.0e-9;
+	float tolerance = 1.0e-5;
 	float zerror;
+	float total_error = 0.0;
 
 	int gidx;
 
@@ -974,9 +1046,10 @@ extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zi
 
 	b_d.cudaMatrixcpy(bin,cudaMemcpyHostToDevice);
 	b_d.cudaMatrixcpy(b_cpu,cudaMemcpyDeviceToHost);
-	z_d.cudaMatrixcpy(zin,cudaMemcpyHostToDevice);
-	z_d.cudaMatrixcpy(z_cpu,cudaMemcpyDeviceToHost);
+	//z_d.cudaMatrixcpy(zin,cudaMemcpyHostToDevice);
+	//z_d.cudaMatrixcpy(z_cpu,cudaMemcpyDeviceToHost);
 	solver->phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
+	solver -> gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
 
 	// Do cpu asolve
 	asolve_(*n1,*n2,*n3,b_cpu,z_cpu,&zerror);
@@ -993,7 +1066,7 @@ extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zi
 	CUDA_SAFE_CALL(cudaDeviceSynchronize());
 
 	// Check the results with the results of the host routine
-	for(int i=0;i<(*n1+1);i++)
+	for(int i=1;i<(*n1);i++)
 	{
 		for(int j=1;j<(*n2+1);j++)
 		{
@@ -1008,11 +1081,17 @@ extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zi
 
 				if(terror > tolerance)
 				{
-					printf("Error res %f != %f with error %f at %i, %i, %i\n",gpu_data,cpu_data,terror,i,j,k);
+					printf("Error asolve res %f != %f with error %f at %i, %i, %i\n",gpu_data,cpu_data,terror,i,j,k);
 				}
+
+				total_error += terror;
 			}
 		}
 	}
+
+	// Get the average error
+	total_error /= (float)((*n1)*(*n2)*(*n3));
+	printf("Total Asolve error = %g\n",total_error);
 
 
 
@@ -1026,8 +1105,9 @@ extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zi
 }
 
 extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* res,
-														int* n1,int* n2,int* n3,uint* itrnsp)
+														float* gpc,int* n1,int* n2,int* n3,uint* itrnsp)
 {
+	printf("Executing atimes test\n");
 	PoissonSolver* solver;
 
 	solver = ((PoissonSolver*)(*solverPtr));
@@ -1036,7 +1116,8 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 	int nthsize = solver->nthsize;
 	int npsisize = solver->npsisize;
 
-	float tolerance = 1.0e-4;
+	float tolerance = 1.0e-5;
+	float total_error = 0.0;
 
 	int gidx;
 
@@ -1047,6 +1128,7 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 	float* x_gpu = (float*)malloc((nrsize-1)*(nthsize+1)*(npsisize+1)*sizeof(float));
 	float* x_cpu = (float*)malloc((nrsize-1)*(nthsize+1)*(npsisize+1)*sizeof(float));
 
+	printf("n1 = %i, n2= %i, n3 = %i\n",*n1,*n2,*n3);
 
 	cudaMatrixf x_d = solver->x;
 	cudaMatrixf res_d(nrsize-1,nthsize+1,npsisize+1);
@@ -1056,13 +1138,14 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 	solver->phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
 	solver->x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
 	solver->x.cudaMatrixcpy(x_cpu,cudaMemcpyDeviceToHost);
+	solver->gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
 
 
 	// Do cpu atimes
 	atimes_(*n1,*n2,*n3,x_cpu,res_cpu,itrnsp);
 
 	// Do gpu atimes
-	solver->atimes(*n1,*n2,*n3,x_d,res_d,1);
+	solver->atimes(*n1,*n2,*n3,x_d,res_d,*itrnsp);
 
 
 
@@ -1071,7 +1154,7 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 	solver->x.cudaMatrixcpy(x_gpu,cudaMemcpyDeviceToHost);
 
 	// Check the results with the results of the host routine
-	for(int i=1;i<(*n1);i++)
+	for(int i=0;i<(*n1);i++)
 	{
 		for(int j=1;j<(*n2+1);j++)
 		{
@@ -1082,15 +1165,21 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 				float gpu_data = res_gpu[gidx];
 				float cpu_data = res_cpu[gidx];
 
-				float terror = 1.0*abs(gpu_data-cpu_data)/max(10.0*tolerance,abs(cpu_data+gpu_data));
+				float terror = 2.0*abs(gpu_data-cpu_data)/max(1.0*tolerance,abs(cpu_data+gpu_data));
 
 				if(terror > tolerance)
 				{
-					printf("Error res %f != %f with error %f at %i, %i, %i\n",gpu_data,cpu_data,terror,i,j,k);
+					printf("Error atimes (%i) res %f != %f with error %f at %i, %i, %i\n",*itrnsp,gpu_data,cpu_data,terror,i,j,k);
 				}
+
+				total_error += terror;
 			}
 		}
 	}
+
+	// Get the average error
+	total_error /= (float)((*n1)*(*n2)*(*n3));
+	printf("Total Atimes (%i) error = %g\n",*itrnsp,total_error);
 
 	free(res_gpu);
 	free(res_cpu);
@@ -1104,7 +1193,7 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 
 
 extern "C" void cg3d_test_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* n2,int* n3,
-	    									 float* bin,float* xin,float* tol,int* iter,int* itmax)
+	    									 float* bin,float* xin,float* tol,float* gpc,int* iter,int* itmax)
 {
 	PoissonSolver* solver;
 
@@ -1118,7 +1207,8 @@ extern "C" void cg3d_test_(long int* solverPtr,float* phi,int* lbcg,int* n1,int*
 	int iter_cpu;
 	float gpu_tol = *tol;
 
-	float tolerance = 1.0e-4;
+	float tolerance = 1.0e-3;
+	float total_error = 0.0;
 
 	int gidx;
 
@@ -1136,7 +1226,7 @@ extern "C" void cg3d_test_(long int* solverPtr,float* phi,int* lbcg,int* n1,int*
 	memcpy(x_cpu,xin,(nrsize-1)*(nthsize+1)*(npsisize+1)*sizeof(float));
 
 	// Do gpu atimes
-	cg3d_gpu_(solverPtr,phi,lbcg,n1,n2,n3,b_gpu,x_gpu,&gpu_tol,&iter_gpu,itmax);
+	cg3d_gpu_(solverPtr,phi,lbcg,n1,n2,n3,b_gpu,x_gpu,&gpu_tol,gpc,&iter_gpu,itmax);
 	// Do cpu cg3d
 	cg3d_(*n1,*n2,*n3,b_cpu,x_cpu,*tol,iter_cpu,*itmax);
 
@@ -1147,7 +1237,7 @@ extern "C" void cg3d_test_(long int* solverPtr,float* phi,int* lbcg,int* n1,int*
 	printf("GPU took %i iterations\n",iter_gpu);
 
 	// Check the results with the results of the host routine
-	for(int i=1;i<(*n1+1);i++)
+	for(int i=1;i<(*n1);i++)
 	{
 		for(int j=1;j<(*n2+1);j++)
 		{
@@ -1158,15 +1248,21 @@ extern "C" void cg3d_test_(long int* solverPtr,float* phi,int* lbcg,int* n1,int*
 				float gpu_data = x_gpu[gidx];
 				float cpu_data = x_cpu[gidx];
 
-				float terror = 1.0*abs(gpu_data-cpu_data)/max(100.0*tolerance,abs(cpu_data+gpu_data));
+				float terror = 2.0*abs(gpu_data-cpu_data)/max(10.0*tolerance,abs(cpu_data+gpu_data));
 
 				if(terror > tolerance)
 				{
-					printf("Error res %f != %f with error %f at %i, %i, %i\n",gpu_data,cpu_data,terror,i,j,k);
+					printf("Error cg3d res %f != %f with error %f at %i, %i, %i\n",gpu_data,cpu_data,terror,i,j,k);
 				}
+
+				total_error += terror;
 			}
 		}
 	}
+
+	// Get the average error
+	total_error /= (float)((*n1)*(*n2)*(*n3));
+	printf("Total cg3d error = %g\n",total_error);
 
 	free(b_gpu);
 	free(b_cpu);

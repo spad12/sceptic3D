@@ -29,18 +29,19 @@
 
 #define ATIMES_BLOCK_SIZE 256
 
-
 class PoissonSolver
 {
 public:
 	int nrsize,nthsize,npsisize;
 	int n1,n2,n3;
+	int t_iter;
 
 	cudaMatrixf apc,bpc,cpc,dpc,epc,fpc,gpc;
 	cudaMatrixf x;
 	cudaMatrixf b;
 	cudaMatrixf p,z,pp,zz,res,resr;
 	cudaMatrixf phi;
+	cudaMatrixf rho;
 	float* sum_array;
 
 	float bknum,bkden;
@@ -67,48 +68,39 @@ public:
 	void eval_sum(const int operation);
 	__host__
 	void cg3D(int n1_in,int n2_in,int n3_in,float* bin,float* xin, float &tol,int &iter,int &itmax,int &lbcg);
+	__host__
+	void shielding3D(float dt, int n1, int n2, int n3,int lbcg);
 
 
 	__device__
-	float bknum_eval(float val_in,int gidx,int gidy,int gidz)
+	float bknum_eval(int gidx,int gidy,int gidz)
 	{
 		float tval = z(gidx,gidy,gidz)*resr(gidx,gidy,gidz);
-		if(isnan(tval))
-		{
-			tval = 0.0;
-		}
 
 
-		return val_in+tval;
+		return tval;
 	}
 	__device__
-	float aknum_eval(float val_in,int gidx,int gidy,int gidz)
+	float aknum_eval(int gidx,int gidy,int gidz)
 	{
 		float tval = z(gidx,gidy,gidz)*pp(gidx,gidy,gidz);
 
-		if(isnan(tval))
-		{
-			tval = 0.0;
-		}
-
-
-		return val_in+tval;
+		return tval;
 	}
 	__device__
-	float delta_eval(float val_in,int gidx,int gidy,int gidz)
+	float delta_eval(int gidx,int gidy,int gidz)
 	{
 		float ak = bknum/akden;
+
 		float delta = ak*p(gidx,gidy,gidz);
-		if(isnan(delta))
-		{
-			delta = 0.0;
-		}
+
+	//	printf("bknum, akden, ak = %f, %f, %f\n",bknum,akden,ak);
 
 		x(gidx,gidy,gidz) += delta;
-		res(gidx,gidy,gidz) -= ak*z(gidx,gidy,gidz);
-		resr(gidx,gidy,gidz) -= ak*zz(gidx,gidy,gidz);
+		res(gidx,gidy,gidz) = res(gidx,gidy,gidz) - ak*z(gidx,gidy,gidz);
+		resr(gidx,gidy,gidz) = resr(gidx,gidy,gidz) - ak*zz(gidx,gidy,gidz);
 
-		return max(abs(val_in),max(abs(delta),0.0));
+		return abs(delta);
 	}
 
 	__host__

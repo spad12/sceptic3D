@@ -51,7 +51,8 @@ c Grid dimensions
       fparams(9) = cB
       fparams(10) = Bz
 
-      test_atimes = .true.
+      test_atimes = 1
+      test_atimesm = 10
 
 
       call gpu_mesh_init(GPUMesh,phi,phiaxis,rho,rhoDiag,
@@ -59,10 +60,12 @@ c Grid dimensions
      $			irpre,itpre,ippre,Qcom,Gcom,Vcom,
      $					fparams,intparams,ierr)
 
+           call gpu_psolver_init(GPUPsolve,GPUMesh,apc,bpc,cpc,dpc,
+     $						epc,fpc,gpc,nrsize,nthsize,npsisize)
+
       call gpu_particle_list_init(GPUXPlist,npart)
 
-      call gpu_psolver_init(GPUPsolve,apc,bpc,cpc,dpc,
-     $						epc,fpc,gpc,nrsize,nthsize,npsisize)
+
 
 			end
 
