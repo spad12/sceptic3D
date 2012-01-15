@@ -78,7 +78,7 @@ c      call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
 				call cg3D_gpu(GPUPsolve,phi,tlbcg,n1,nthused,
      $			npsiused,b,x,dconverge,gpc,iter,maxits)
       else
-      call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
+	    call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
       endif
       call stop_timer(fcalct,t3)
 
@@ -422,7 +422,7 @@ c **************************************
      $			,0:nthsize,0:npsisize)
 
       if (test_atimes.le.test_atimesm) then
-      	temp = .false.
+      	temp = .true.
 				call atimes_test(GPUPsolve,phi,x,res,
      $			gpc,n1,n2,n3,temp)
 			 test_atimes = test_atimes + 1

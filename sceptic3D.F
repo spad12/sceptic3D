@@ -501,7 +501,7 @@ c     Timing
 
       if(gpurun)then
 c Initialize GPU arrays
-				call initialize_gpu(GPUXPlist,GPUMesh)
+				call initialize_gpu(GPUXPlist,GPUMesh,myid2)
 			endif
 #ifdef MPI
       	call MPI_BARRIER(MPI_COMM_WORLD,ierr)

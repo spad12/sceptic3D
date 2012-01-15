@@ -110,7 +110,8 @@ OBJ := initiate.o \
        rhoinfcalc.o \
        shielding3D.o \
        timing.f \
-       shielding3D_gpu.o \
+       cg3D_gpu.o \
+       gpu_psolve_tests.o \
        stupid_sort.o
 # Reinjection related objects
 OBJ += orbitinject.o \

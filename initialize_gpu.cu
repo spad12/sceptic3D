@@ -2,19 +2,18 @@
 
 #include "XPlist.cuh"
 
-__global__
-void dummy_kernel2(void){;}
-
 
 extern "C" void pick_gpu_(int* myid,int* mynpart)
 {
+
 	int ndevices;
 	cudaGetDeviceCount(&ndevices);
-	int my_device = *myid;
+	int my_device = abs(*myid-1);
 
 	if(*myid < ndevices)
 	{
 		CUDA_SAFE_CALL(cudaSetDevice(my_device));
+		cudaDeviceReset();
 	}
 	else
 	{

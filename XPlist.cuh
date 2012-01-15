@@ -519,7 +519,9 @@ int Mesh_data::interppsi(float sp,float cp,float* pf)
 	psi = atan2(sp,cp);
 	if(psi < 0.0f) psi+=2.0f*pi_const;
 
-	ipl = ippre((int)abs(floor((psi-pcc(1))*pfac)));
+	ipl = abs(floor((psi-pcc(1))*pfac));
+
+	ipl = ippre(ipl);
 
 	pf[0] = (psi - pcc(ipl))/(pcc(ipl+1)-pcc(ipl));
 
@@ -546,8 +548,24 @@ int Mesh_data::interpth(float ct,float* thf)
 {
 	int ithl;
 
-	ithl = itpre((int)abs(floor((ct-thmesh(1))*tfac)));
+	ithl = abs(floor((ct-thmesh(1))*tfac));
+
+	ithl = itpre(ithl);
 	thf[0] = (ct-thmesh(ithl))/(thmesh(ithl+1)-thmesh(ithl));
+
+	 if(thf[0] < 0.0f)
+	{
+			if(ithl > 1)
+			{
+				ithl -= 1;
+			}
+			else
+			{
+				ithl += nthfull-1;
+			}
+
+			thf[0] = (ct-thmesh(ithl))/(thmesh(ithl+1)-thmesh(ithl));
+	}
 
 	if(thf[0] > 1.0f)
 	{
@@ -557,6 +575,7 @@ int Mesh_data::interpth(float ct,float* thf)
 			thf[0] = (ct-thmesh(ithl))/(thmesh(ithl+1)-thmesh(ithl));
 		}
 	}
+
 
 	return ithl;
 
@@ -603,6 +622,17 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 	float ldotc;
 	int result = 0;
 
+	if(isnan(px2+py2+pz2))
+	{
+		result = 2;
+		py2 = rmesh(nr)/1.73205f;
+		pz2 = rmesh(nr)/1.73205f;
+		px2 = rmesh(nr)/1.73205f+1.0e-5f;
+
+		return result;
+	}
+
+
 	dx = px2-px1;
 	dy = py2-py1;
 	dz = pz2-pz1;
@@ -617,7 +647,7 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 	radical = ldotc*ldotc - (px1*px1+py1*py1+pz1*pz1);
 
 	// First we check the probe
-	if(((radical + rmesh(1)*rmesh(1)) >= 0)&&(ldotc > 0))
+	if(((radical + rmesh(1)*rmesh(1)) >= 0.0f)&&(ldotc > 0.0f))
 	{
 		// We have an intersection with the probe
 		dp = ldotc + sqrt(radical + rmesh(1)*rmesh(1));
@@ -636,6 +666,8 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 			py2 = py1 + d*dy;
 			pz2 = pz1 + d*dz;
 			result = 1;
+
+			return result;
 		}
 
 	}
@@ -656,7 +688,7 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 		px2 = px1 + d*dx;
 		py2 = py1 + d*dy;
 		pz2 = pz1 + d*dz;
-
+		return result;
 
 	}
 
@@ -847,7 +879,7 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	            philm1tp=2*phi(irl,ith,iplp1)-phi(ir,ith,iplp1);
 	            philm1pp=2*phi(irl,ithp1,iplp1)-phi(ir,ithp1,iplp1);
 
-	            rlm1=2.*rl - rr;
+	            rlm1=2.0f*rl - rr;
 		  }
 		  else
 		  {
@@ -858,10 +890,10 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	            rlm1=rmesh(ilm1);
 		  }
 
-		 philm1t=philm1tp*pf+philm1tt*(1-pf);
-		 philm1p=philm1pp*pf+philm1pt*(1-pf);
+		 philm1t=philm1tp*pf+philm1tt*(1.0f-pf);
+		 philm1p=philm1pp*pf+philm1pt*(1.0f-pf);
 
-		  if(zetap <= 1.0e-2) zetap = 1.0e-2f;
+		  if(zetap <= 1.0e-2f) zetap = 1.0e-2f;
 
 	      ar = (  ( (phihp1t-phih1t)/(zeta(ir)-zeta(ih))*hf +
 	             (phih1t-philm1t)/(zeta(ih)-zeta(ilm1))*(1.0f-hf))*(1.0f-tflin)
@@ -883,9 +915,9 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	         philm1p=philm1pp*pf+philm1pt*(1-pf);
 
 	         ar=(  ( (phihp1t-phih1t)/(rr-rl)*hf +
-	            (phih1t-philm1t)/(rl-rlm1)*(1.-hf))*(1.-tflin)
+	            (phih1t-philm1t)/(rl-rlm1)*(1.0f-hf))*(1.0f-tflin)
 	            +( (phihp1p-phih1p)/(rr-rl)*hf +
-	            (phih1p-philm1p)/(rl-rlm1)*(1.-hf))*tflin );
+	            (phih1p-philm1p)/(rl-rlm1)*(1.0f-hf))*tflin );
 	  }
 
 	  ar = -ar;
@@ -919,15 +951,15 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 
 	  if(pf<=0.5f)
 	  {
-	         ap= ( (phih1pX-phih1tX)*(pf)*2./rl +0.5*(phih1pX-phih1mX)*(0.5
-	             -pf)*2./rl ) * (1.-rf) + ( (phihp1pX-phihp1tX)*(pf)*2./rr
-	             +0.5*(phihp1pX-phihp1mX)*(0.5-pf)*2./rr ) * rf;
+	         ap= ( (phih1pX-phih1tX)*(pf)*2./rl +0.5f*(phih1pX-phih1mX)*(0.5f
+	             -pf)*2.0f/rl ) * (1.0f-rf) + ( (phihp1pX-phihp1tX)*(pf)*2.0f/rr
+	             +0.5f*(phihp1pX-phihp1mX)*(0.5f-pf)*2.0f/rr ) * rf;
 	  }
 	  else
 	  {
-	         ap= ( 0.5*(phih12X-phih1tX)*(pf-0.5)*2. /rl +(phih1pX-phih1tX)
-	             *(1.-pf)*2./rl ) * (1.-rf) + ( 0.5*(phihp12X-phihp1tX)*(pf
-	             -0.5)*2./rr +(phihp1pX-phihp1tX)*(1.-pf)*2./rr ) * rf;
+	         ap= ( 0.5f*(phih12X-phih1tX)*(pf-0.5f)*2.0f/rl +(phih1pX-phih1tX)
+	             *(1.0f-pf)*2.0f/rl ) * (1.0f-rf) + ( 0.5f*(phihp12X-phihp1tX)*(pf
+	             -0.5f)*2.0f/rr +(phihp1pX-phihp1tX)*(1.0f-pf)*2.0f/rr ) * rf;
 	  }
 
 	  ap=-ap/(st*dpsi+1.0e-7f);

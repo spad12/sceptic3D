@@ -464,7 +464,8 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 	float* my_data_out;
 	float zetap;
 
-	__shared__ float sdata[9*9*9];
+
+	__shared__ float sdata[10*10*10];
 
 	while(idx < 9*9*9)
 	{
@@ -499,7 +500,7 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 		{
 			mesh.ptomesh(particles.px[gidx],particles.py[gidx],particles.pz[gidx],&my_cell,&cellfractions,zetap);
 
-			my_data_out = sdata+(my_cell.x-binindex.x-1) + bindim*(my_cell.y-binindex.y-1+bindim*(my_cell.z-binindex.z-1));
+			my_data_out = sdata + (my_cell.x-(int)(binindex.x)-1) + bindim*(my_cell.y-binindex.y-1+bindim*(my_cell.z-binindex.z-1));
 			//my_cell.x -= 1;
 			//my_cell.y -= 1;
 			//my_cell.z -= 1;
@@ -541,11 +542,33 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 			}
 */
 
-		//	if((my_cell.x-binindex.x-1 < 8)&&(my_cell.y-binindex.y-1 < 8)&&(my_cell.z-binindex.z-1 < 8)&&
-		//		(my_cell.x-binindex.x-1 >= 0)&&(my_cell.x-binindex.x-1 >= 0)&&(my_cell.x-binindex.x-1 >= 0))
-		//	{
-				write_to_nodes(my_data_out,1.0,cellfractions);
-		//	}
+
+
+			write_to_nodes(my_data_out,1.0f,cellfractions);
+
+			/*
+			lcell.x = my_cell.x-1;
+			lcell.y = my_cell.y-1;
+			lcell.z = my_cell.z-1;
+			lcell.x -= (int)(binindex.x);
+			lcell.y -= (int)(binindex.y);
+			lcell.z -= (int)(binindex.z);
+
+			if(((lcell.x) < 8)&&((lcell.y) < 8)&&((lcell.z) < 8)&&
+				((lcell.x) >= 0)&&((lcell.y) >= 0)&&((lcell.z) >= 0)&&
+				(cellfractions.x >= 0.0f)&&(cellfractions.y >= 0.0f)&&
+				(cellfractions.z >= 0.0f)&&
+				(cellfractions.x <= 1.0f)&&(cellfractions.y <= 1.0f)&&
+				(cellfractions.z <= 1.0f))
+			{
+				write_to_nodes(my_data_out,1.0f,cellfractions);
+			}
+			else
+			{
+				printf("Error particle %i in cell (%i, %i, %i) at position %f, %f, %f with cellf %f, %f, %f\n",gidx,my_cell.x,
+							my_cell.y,my_cell.z,particles.px[gidx],particles.py[gidx],particles.pz[gidx],cellfractions.x,cellfractions.y,cellfractions.z);
+			}
+			*/
 		}
 
 		block_start += CHARGE_ASSIGN_BLOCK_SIZE;
@@ -672,15 +695,22 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 					atomicAdd(&momprobe.x,vtemp.x);
 					atomicAdd(&momprobe.y,vtemp.y);
 					atomicAdd(&momprobe.z,vtemp.z);
-					atomicAdd(&momprobe.w,0.5*vr2);
+					atomicAdd(&momprobe.w,0.5f*vr2);
 					atomicAdd(&ninner,1);
 
 				}
 				else
 				{
+					if(didileave == 2)
+					{
+						vtemp.x = particles.vx[gidx];
+						vtemp.y = particles.vy[gidx];
+						vtemp.z = particles.vz[gidx];
+					}
 					atomicAdd(&momout.x,-vtemp.x);
 					atomicAdd(&momout.y,-vtemp.y);
 					atomicAdd(&momout.z,-vtemp.z);
+
 				}
 			}
 

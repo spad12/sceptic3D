@@ -29,6 +29,14 @@
 
 #define ATIMES_BLOCK_SIZE 256
 
+extern "C" void cg3d_gpu_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* n2,int* n3,
+	    									float* bin,float* xin,float* tol,float* gpc,int* iter,int* itmax);
+
+extern "C" void start_timer_(uint* timer);
+
+extern "C" void stop_timer_(float* time,uint* timer);
+
+
 class PoissonSolver
 {
 public:
@@ -64,10 +72,12 @@ public:
 	void setup_res(void);
 	__host__
 	void pppp(void);
+
+	template<int operation>
 	__host__
-	void eval_sum(const int operation);
+	void eval_sum(void);
 	__host__
-	void cg3D(int n1_in,int n2_in,int n3_in,float* bin,float* xin, float &tol,int &iter,int &itmax,int &lbcg);
+	void cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int itmax,int lbcg);
 	__host__
 	void shielding3D(float dt, int n1, int n2, int n3,int lbcg);
 
@@ -76,7 +86,6 @@ public:
 	float bknum_eval(int gidx,int gidy,int gidz)
 	{
 		float tval = z(gidx,gidy,gidz)*resr(gidx,gidy,gidz);
-
 
 		return tval;
 	}
