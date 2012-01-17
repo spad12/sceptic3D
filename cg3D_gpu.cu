@@ -1,6 +1,10 @@
 #include "gpu_solver.cuh"
 #include "XPlist.cuh"
 
+#define ATIMES_DOMAIN_DIMx 9
+#define ATIMES_DOMAIN_DIMy 9
+#define ATIMES_DOMAIN_DIMz 9
+
 #define ATIMES_DOMAIN_DIM 13
 
 template<typename T>
@@ -74,6 +78,16 @@ extern "C" {void atimes_(int &n1,int &n2, int &n3,float* x, float* res,uint* itr
 extern "C" {void asolve_(int &n1,int &n2, int &n3,float* b, float* z,float* zerror);}
 extern "C" {void cg3d_(int &n1,int &n2,int &n3,float* b,float* x,float &tol,int &iter,int&itmax);}
 
+__device__
+void calc_dims(int &idx,int &idy,int &idz,int thidin,int3 dimin)
+{
+	idz = thidin/(dimin.x*dimin.y);
+	idy = thidin/dimin.x - idz*dimin.y;
+	idx = thidin - dimin.x*(idy + dimin.y*idz);
+
+}
+
+__host__
 void print_cudaMatrixf(cudaMatrixf M_in,int n1 = 0,int n2 = 0, int n3 = 0)
 {
 	int nx,ny,nz;
@@ -116,6 +130,7 @@ void print_cudaMatrixf(cudaMatrixf M_in,int n1 = 0,int n2 = 0, int n3 = 0)
 
 }
 
+
 extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* apc,float* bpc,float* cpc, float* dpc,float* epc,
 													   float* fpc,float* gpc,int* nrsize,int* nthsize,int* npsisize)
 {
@@ -124,6 +139,7 @@ extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* a
 
 	solver->phi = mesh_d.phi;
 	solver->rho = mesh_d.rho;
+	solver->phiaxis = mesh_d.phiaxis;
 
 	solver->allocate(*nrsize,*nthsize,*npsisize);
 
@@ -202,31 +218,33 @@ void setup_shared(sMatrixf &apcin,sMatrixf &bpcin,sMatrixf &cpcin,
 							    sMatrixf &gpcin,sMatrixf &expphiin,sMatrixf &xin,
 							    sMatrixf &resin)
 {
-	const int d = ATIMES_DOMAIN_DIM+2;
-	__shared__ float apc[d];
-	__shared__ float bpc[d];
-	__shared__ float cpc[d*d];
-	__shared__ float dpc[d*d];
-	__shared__ float epc[d*d];
-	__shared__ float fpc[d*d];
-	__shared__ float gpc[d*d*5];
-	__shared__ float expphi[d*d*d];
-	__shared__ float x[d*d*d];
-	__shared__ float res[d*d*d];
+	const int dx = ATIMES_DOMAIN_DIMx+2;
+	const int dy = ATIMES_DOMAIN_DIMy+2;
+	const int dz = ATIMES_DOMAIN_DIMz+2;
+	__shared__ float apc[dx];
+	__shared__ float bpc[dx];
+	__shared__ float cpc[dx*dy];
+	__shared__ float dpc[dx*dy];
+	__shared__ float epc[dx*dy];
+	__shared__ float fpc[dx*dy];
+	__shared__ float gpc[dy*dz*5];
+	__shared__ float expphi[dx*dy*dz];
+	__shared__ float x[dx*dy*dz];
+	__shared__ float res[dx*dy*dz];
 
 	if(threadIdx.x+threadIdx.y+threadIdx.z == 0)
 	{
-		apcin.init(apc,d,1,1);
-		bpcin.init(bpc,d,1,1);
-		cpcin.init(cpc,d,d,1);
-		dpcin.init(dpc,d,d,1);
-		epcin.init(epc,d,d,1);
-		fpcin.init(fpc,d,d,1);
-		gpcin.init(gpc,d,d,5);
+		apcin.init(apc,dx,1,1);
+		bpcin.init(bpc,dx,1,1);
+		cpcin.init(cpc,dx,dy,1);
+		dpcin.init(dpc,dx,dy,1);
+		epcin.init(epc,dx,dy,1);
+		fpcin.init(fpc,dx,dy,1);
+		gpcin.init(gpc,dy,dz,5);
 
-		expphiin.init(expphi,d,d,d);
-		xin.init(x,d,d,d);
-		resin.init(res,d,d,d);
+		expphiin.init(expphi,dx,dy,dz);
+		xin.init(x,dx,dy,dz);
+		resin.init(res,dx,dy,dz);
 	}
 	__syncthreads();
 
@@ -474,8 +492,10 @@ void atimes_transp_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf res
 
 }
 
+
+template<int itransp>
 __global__
-void atimes_transp_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
+void atimes_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
 {
 	int idx = threadIdx.x+1;
 	int idy = threadIdx.y+1;
@@ -487,45 +507,95 @@ void atimes_transp_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
 	int gidy = bidy+idy;
 	int gidz = bidz+idz;
 
-	int gidzp = gidz+1;
-	int gidzm = gidz-1;
 
-	if(gidz == 1) gidzm = solver.n3;
-	if(gidz == solver.n3) gidzp = 1;
+
 
 	// Bulk loop
-	if((gidz > 0)&&(gidz <= solver.n3))
+	while(gidz <= solver.n3)
 	{
-		if((gidy > 0)&&(gidy <= solver.n2))
+		int gidzp = gidz+1;
+		int gidzm = gidz-1;
+		if(gidz == 1) gidzm = solver.n3;
+		if(gidz == solver.n3) gidzp = 1;
+
+		gidy = idy+bidy;
+		while(gidy <= solver.n2)
 		{
-			if((gidx > 0)&&(gidx <= (solver.n1-3)))
+			gidx = idx+bidx;
+			while(gidx < solver.n1)
 			{
-				resin(gidx,gidy,gidz) = solver.bpc(gidx+1+1)*x(gidx+1,gidy,gidz)
-						+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
-						+ solver.dpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
-						+ solver.cpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
-						+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-						- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+				switch(itransp)
+				{
+				case 1:
+					if((gidx > 0)&&(gidx <= (solver.n1-3)))
+					{
+						resin(gidx,gidy,gidz) = solver.bpc(gidx+1+1)*x(gidx+1,gidy,gidz)
+								+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
+								+ solver.dpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
+								+ solver.cpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
+								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+					}
+					else if(gidx == (solver.n1-2))
+					{
+						resin(gidx,gidy,gidz) = ((solver.bpc(gidx+1+1)+solver.gpc(gidy,gidz,0)*solver.apc(gidx+1+1))*x(gidx+1,gidy,gidz)
+								+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
+								+ solver.dpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
+								+ solver.cpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
+								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz));
+					}
+					else if(gidx == (solver.n1-1))
+					{
+						resin(gidx,gidy,gidz) = solver.bpc(gidx+1+1)*x(gidx+1,gidy,gidz)
+								+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
+								+ (solver.dpc(gidx+1,gidy+1)+solver.gpc(gidy+1,gidz,1)*solver.apc(gidx+1))*x(gidx,gidy+1,gidz)
+								+ (solver.cpc(gidx+1,gidy-1)+solver.gpc(gidy-1,gidz,2)*solver.apc(gidx+1))*x(gidx,gidy-1,gidz)
+								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz))-solver.gpc(gidy,gidz,4)*solver.apc(gidx+1))*x(gidx,gidy,gidz);
+					}
+					break;
+				case 0:
+					if((gidx > 0)&&(gidx <= (solver.n1-2)))
+					{
+						resin(gidx,gidy,gidz) = solver.apc(gidx+1)*x(gidx+1,gidy,gidz)
+								+ solver.bpc(gidx+1)*x(gidx-1,gidy,gidz)
+								+ solver.cpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
+								+ solver.dpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
+								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+					}
+					else 	if((gidx == (solver.n1-1)))
+					{
+						x(gidx+1,gidy,gidz) = solver.gpc(gidy,gidz,0)*x(gidx-1,gidy,gidz)
+								+ solver.gpc(gidy,gidz,1)*x(gidx,gidy-1,gidz)
+								+ solver.gpc(gidy,gidz,2)*x(gidx,gidy+1,gidz)
+								//+ 0.0f*gpcs(gidy,gidz,3)
+								+ solver.gpc(gidy,gidz,4)*x(gidx,gidy,gidz);
+
+						resin(gidx,gidy,gidz) = solver.apc(gidx+1)*x(gidx+1,gidy,gidz)
+								+ solver.bpc(gidx+1)*x(gidx-1,gidy,gidz)
+								+ solver.cpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
+								+ solver.dpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
+								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+					}
+					else
+					{
+						resin(gidx,gidy,gidz) = 0;
+					}
+
+					break;
+
+				default:
+					break;
+				}
+
+				gidx += blockDim.x*gridDim.x;
 			}
-			else if(gidx == (solver.n1-2))
-			{
-				resin(gidx,gidy,gidz) = ((solver.bpc(gidx+1+1)+solver.gpc(gidy,gidz,0)*solver.apc(gidx+1+1))*x(gidx+1,gidy,gidz)
-						+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
-						+ solver.dpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
-						+ solver.cpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
-						+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-						- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz));
-			}
-			else if(gidx == (solver.n1-1))
-			{
-				resin(gidx,gidy,gidz) = solver.bpc(gidx+1+1)*x(gidx+1,gidy,gidz)
-						+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
-						+ (solver.dpc(gidx+1,gidy+1)+solver.gpc(gidy+1,gidz,1)*solver.apc(gidx+1))*x(gidx,gidy+1,gidz)
-						+ (solver.cpc(gidx+1,gidy-1)+solver.gpc(gidy-1,gidz,2)*solver.apc(gidx+1))*x(gidx,gidy-1,gidz)
-						+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-						- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz))-solver.gpc(gidy,gidz,4)*solver.apc(gidx+1))*x(gidx,gidy,gidz);
-			}
+			gidy += blockDim.y*gridDim.y;
 		}
+		gidz += blockDim.z*gridDim.z;
 	}
 
 }
@@ -692,7 +762,7 @@ void atimes_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 
 template<int itransp>
 __global__
-void atimes_kernelc(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin,int3 ndo)
+void atimes_kernelc(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 {
 	int idx = threadIdx.x;
 	int idy = threadIdx.y;
@@ -967,6 +1037,251 @@ void atimes_kernelc(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin,int3
 
 }
 
+template<int itransp>
+__global__
+void atimes_kernelc2(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
+{
+	int thid = threadIdx.x;
+	int idx;
+	int idy;
+	int idz;
+	int bidx = blockIdx.x*ATIMES_DOMAIN_DIMx;
+	int bidy = blockIdx.y*ATIMES_DOMAIN_DIMy;
+	int bidz = blockIdx.z*ATIMES_DOMAIN_DIMz;
+	int gidx;
+	int gidy;
+	int gidz;
+	int3 bdim;
+
+
+	bdim.x = min(ATIMES_DOMAIN_DIMx+2,(solver.n1+2-bidx));
+	bdim.y = min(ATIMES_DOMAIN_DIMy+2,(solver.n2+2-bidy));
+	bdim.z = min(ATIMES_DOMAIN_DIMz+2,(solver.n3+2-bidz));
+
+	int nelements = bdim.x*bdim.y*bdim.z;
+
+	bool dimcheck;
+
+
+
+	__shared__ sMatrixf apcs,bpcs,cpcs,dpcs,epcs,fpcs,gpcs;
+	__shared__ sMatrixf x,res,expphi;
+
+	setup_shared(apcs,bpcs,cpcs,dpcs,epcs,fpcs,gpcs,expphi,x,res);
+
+
+	// Load all the data into shared memory
+	while(thid < (nelements))
+	{
+		// Calculate idx, idy, & idz from thid
+
+		calc_dims(idx,idy,idz,thid,bdim);
+
+		gidx = idx+bidx;
+		gidy = idy+bidy;
+		gidz = idz+bidz;
+
+		// Check dimensions
+		dimcheck = ((idx < (ATIMES_DOMAIN_DIMx+2))&&(gidx <= (solver.n1+1)));
+		dimcheck = dimcheck&&((idy < (ATIMES_DOMAIN_DIMy+2))&&(gidy <= (solver.n2+1)));
+		dimcheck = dimcheck&&((idz < (ATIMES_DOMAIN_DIMz+2))&&(gidz <= (solver.n3+1)));
+
+		if(dimcheck)
+		{
+			if(idz == 0)
+			{
+				if(idy == 0)
+				{
+					apcs(idx) = solver.apc(gidx+1);
+					bpcs(idx) = solver.bpc(gidx+1);
+				}
+
+				cpcs(idx,idy) = solver.cpc(gidx+1,gidy);
+				dpcs(idx,idy) = solver.dpc(gidx+1,gidy);
+				epcs(idx,idy) = solver.epc(gidx+1,gidy);
+				fpcs(idx,idy) = solver.fpc(gidx+1,gidy);
+			}
+
+			expphi(idx,idy,idz) = exp(solver.phi(gidx+1,gidy,gidz));
+
+			if(idx < 5) gpcs(idy,idz,idx) = solver.gpc(gidy,gidz,idx);
+
+			if(gidx <= (solver.n1))
+			{
+				if(gidz == 0)
+				{
+					x(idx,idy,idz) = xin(gidx,gidy,solver.n3);
+				}
+				else if(gidz == solver.n3+1)
+				{
+					x(idx,idy,idz) = xin(gidx,gidy,1);
+				}
+				else
+				{
+					x(idx,idy,idz) = xin(gidx,gidy,gidz);
+				}
+
+			}
+			else
+			{
+				x(idx,idy,idz) = 0.0;
+			}
+		}
+//		else
+//		{
+//			if((blockIdx.x==7)&&(blockIdx.y==7)&&(blockIdx.z==7))
+//				printf("thid = %i, %i = %i, %i, %i, bdim = %i, %i, %i\n",thid,idx,gidx,gidy,gidz,bdim.x,bdim.y,bdim.z);
+
+
+//			break;
+//		}
+
+		thid += blockDim.x;
+	}
+
+	__syncthreads();
+
+	// End of shared memory load
+
+	// Reset thread ID's
+	thid = threadIdx.x;
+	bdim.x = min(ATIMES_DOMAIN_DIMx,(solver.n1-bidx));
+	bdim.y = min(ATIMES_DOMAIN_DIMy,(solver.n2-bidy));
+	bdim.z = min(ATIMES_DOMAIN_DIMz,(solver.n3-bidz));
+	nelements = bdim.x*bdim.y*bdim.z;
+
+	// Bulk loop
+	while(thid < nelements)
+	{
+		// Calculate idx, idy, & idz from thid
+		calc_dims(idx,idy,idz,thid,bdim);
+		idx += 1;
+		idy += 1;
+		idz += 1;
+
+		gidx = idx+bidx;
+		gidy = idy+bidy;
+		gidz = idz+bidz;
+
+
+		// Check dimensions
+		dimcheck = ((idx < (ATIMES_DOMAIN_DIMx+1))&&(gidx < (solver.n1)));
+		dimcheck = dimcheck&&((idy < (ATIMES_DOMAIN_DIMy+1))&&(gidy <= (solver.n2)));
+		dimcheck = dimcheck&&((idz < (ATIMES_DOMAIN_DIMz+1))&&(gidz <= (solver.n3)));
+
+		if(dimcheck)
+		{
+			switch(itransp)
+			{
+			case 0:
+				if((gidx > 0)&&(gidx <= (solver.n1-2)))
+				{
+					res(idx,idy,idz) = apcs(idx)*x(idx+1,idy,idz)
+							+ bpcs(idx)*x(idx-1,idy,idz)
+							+ cpcs(idx,idy)*x(idx,idy+1,idz)
+							+ dpcs(idx,idy)*x(idx,idy-1,idz)
+							+ epcs(idx,idy)*(x(idx,idy,idz+1)+x(idx,idy,idz-1))
+							- (fpcs(idx,idy)+expphi(idx,idy,idz))*x(idx,idy,idz);
+				}
+				else 	if((gidx == (solver.n1-1)))
+				{
+					x(idx+1,idy,idz) = gpcs(idy,idz,0)*x(idx-1,idy,idz)
+							+ gpcs(idy,idz,1)*x(idx,idy-1,idz)
+							+ gpcs(idy,idz,2)*x(idx,idy+1,idz)
+							//+ 0.0f*gpcs(idy,idz,3)
+							+ gpcs(idy,idz,4)*x(idx,idy,idz);
+
+					res(idx,idy,idz) = apcs(idx)*x(idx+1,idy,idz)
+							+ bpcs(idx)*x(idx-1,idy,idz)
+							+ cpcs(idx,idy)*x(idx,idy+1,idz)
+							+ dpcs(idx,idy)*x(idx,idy-1,idz)
+							+ epcs(idx,idy)*(x(idx,idy,idz+1)+x(idx,idy,idz-1))
+							- (fpcs(idx,idy)+expphi(idx,idy,idz))*x(idx,idy,idz);
+				}
+				else
+				{
+					res(idx,idy,idz) = 0;
+				}
+				break;
+
+			case 1:
+				if((gidx > 0)&&(gidx <= (solver.n1-3)))
+				{
+					res(idx,idy,idz) = bpcs(idx+1)*x(idx+1,idy,idz)
+							+ apcs(idx-1)*x(idx-1,idy,idz)
+							+ dpcs(idx,idy+1)*x(idx,idy+1,idz)
+							+ cpcs(idx,idy-1)*x(idx,idy-1,idz)
+							+ epcs(idx,idy)*(x(idx,idy,idz+1)+x(idx,idy,idz-1))
+							- (fpcs(idx,idy)+expphi(idx,idy,idz))*x(idx,idy,idz);
+				}
+				else if(gidx == (solver.n1-2))
+				{
+					res(idx,idy,idz) = ((bpcs(idx+1)+gpcs(idy,idz,0)*apcs(idx+1))*x(idx+1,idy,idz)
+							+ apcs(idx-1)*x(idx-1,idy,idz)
+							+ dpcs(idx,idy+1)*x(idx,idy+1,idz)
+							+ cpcs(idx,idy-1)*x(idx,idy-1,idz)
+							+ epcs(idx,idy)*(x(idx,idy,idz+1)+x(idx,idy,idz-1))
+							- (fpcs(idx,idy)+expphi(idx,idy,idz))*x(idx,idy,idz));
+					//printf("Solving res(%i, %i, %i) = %f\n",gidx,gidy,gidz,res(idx,idy,idz));
+				}
+				else if(gidx == (solver.n1-1))
+				{
+					res(idx,idy,idz) = bpcs(idx+1)*x(idx+1,idy,idz)
+							+ apcs(idx-1)*x(idx-1,idy,idz)
+							+ (dpcs(idx,idy+1)+gpcs(idy+1,idz,1)*apcs(idx))*x(idx,idy+1,idz)
+							+ (cpcs(idx,idy-1)+gpcs(idy-1,idz,2)*apcs(idx))*x(idx,idy-1,idz)
+							+ epcs(idx,idy)*(x(idx,idy,idz+1)+x(idx,idy,idz-1))
+							- (fpcs(idx,idy)+expphi(idx,idy,idz)-gpcs(idy,idz,4)*apcs(idx))*x(idx,idy,idz);
+				}
+				else
+				{
+					res(idx,idy,idz) = 0;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+
+		thid += blockDim.x;
+	}
+
+	__syncthreads();
+
+	// Reset thread ID's
+	thid = threadIdx.x;
+#pragma unroll 3
+	while(thid < nelements)
+	{
+		// Calculate idx, idy, & idz from thid
+		calc_dims(idx,idy,idz,thid,bdim);
+		idx += 1;
+		idy += 1;
+		idz += 1;
+
+		gidx = idx+bidx;
+		gidy = idy+bidy;
+		gidz = idz+bidz;
+
+		// Check dimensions
+		dimcheck = ((idx < (ATIMES_DOMAIN_DIMx+1))&&(gidx < (solver.n1)));
+		dimcheck = dimcheck&&((idy < (ATIMES_DOMAIN_DIMy+1))&&(gidy <= (solver.n2)));
+		dimcheck = dimcheck&&((idz < (ATIMES_DOMAIN_DIMz+1))&&(gidz <= (solver.n3)));
+
+		if(dimcheck)
+		{
+
+			resin(gidx,gidy,gidz) = res(idx,idy,idz);
+
+			if(itransp == 0)
+				if(gidx == solver.n1-1) xin(gidx+1,gidy,gidz) = x(idx+1,idy,idz);
+
+		}
+
+		thid += blockDim.x;
+	}
+
+}
 
 __global__
 void asolve_kernel(PoissonSolver solver,cudaMatrixf bin,cudaMatrixf zin)
@@ -1230,38 +1545,69 @@ void PoissonSolver::asolve(int n1_in,int n2_in,int n3_in,cudaMatrixf bin, cudaMa
 
 }
 
+int atimes_shared = 1;
+
 __host__
 void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMatrixf resin,int itransp)
 {
 	dim3 cudaBlockSize(1,1,1);
 	dim3 cudaGridSize(1,1,1);
-	int3 ndo;
 	n1 = n1_in;
 	n2 = n2_in;
 	n3 = n3_in;
 
-	cudaBlockSize.x = 8;
-	cudaBlockSize.y = 8;
-	cudaBlockSize.z = 8;
-
-	ndo.x = (ATIMES_DOMAIN_DIM+cudaBlockSize.x-1)/cudaBlockSize.x;
-	ndo.y = (ATIMES_DOMAIN_DIM+cudaBlockSize.y-1)/cudaBlockSize.y;
-	ndo.z = (ATIMES_DOMAIN_DIM+cudaBlockSize.z-1)/cudaBlockSize.z;
-
-	cudaGridSize.x = (n1+ATIMES_DOMAIN_DIM-1)/(ATIMES_DOMAIN_DIM);
-	cudaGridSize.y = (n2+ATIMES_DOMAIN_DIM-1)/(ATIMES_DOMAIN_DIM);
-	cudaGridSize.z = (n3+ATIMES_DOMAIN_DIM-1)/(ATIMES_DOMAIN_DIM);
-
-	switch(itransp)
+	if(atimes_shared)
 	{
-	case 0:
-		CUDA_SAFE_KERNEL((atimes_kernelc<0><<<cudaGridSize,cudaBlockSize>>>(*this,xin,resin,ndo)));
-		break;
-	case 1:
-		CUDA_SAFE_KERNEL((atimes_kernelc<1><<<cudaGridSize,cudaBlockSize>>>(*this,xin,resin,ndo)));
-		break;
-	default:
-		break;
+		cudaBlockSize.x = 384;
+		cudaBlockSize.y = 1;
+		cudaBlockSize.z = 1;
+
+		cudaGridSize.x = (n1+ATIMES_DOMAIN_DIMx-2)/(ATIMES_DOMAIN_DIMx);
+		cudaGridSize.y = (n2+ATIMES_DOMAIN_DIMy-1)/(ATIMES_DOMAIN_DIMy);
+		cudaGridSize.z = (n3+ATIMES_DOMAIN_DIMz-1)/(ATIMES_DOMAIN_DIMz);
+
+		switch(itransp)
+		{
+		case 0:
+			CUDA_SAFE_KERNEL((atimes_kernelc2<0><<<cudaGridSize,cudaBlockSize>>>(*this,xin,resin)));
+			break;
+		case 1:
+			CUDA_SAFE_KERNEL((atimes_kernelc2<1><<<cudaGridSize,cudaBlockSize>>>(*this,xin,resin)));
+			break;
+		default:
+			break;
+		}
+
+		//atimes_shared = 0;
+	}
+	else
+	{
+		cudaBlockSize.x = 32;
+		cudaBlockSize.y = 8;
+		cudaBlockSize.z = 1;
+
+		cudaGridSize.x = (n1+cudaBlockSize.x-1)/(cudaBlockSize.x);
+		cudaGridSize.y = (n2+cudaBlockSize.y-1)/(cudaBlockSize.y);
+		cudaGridSize.z = (n3+cudaBlockSize.z-1)/(cudaBlockSize.z);
+
+		cudaGridSize.x = 1;
+		cudaGridSize.y = 1;
+		cudaGridSize.z = (n3+cudaBlockSize.z-1)/(cudaBlockSize.z);
+
+		CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+		switch(itransp)
+		{
+		case 0:
+			CUDA_SAFE_KERNEL((atimes_kernel<0><<<cudaGridSize,cudaBlockSize>>>(*this,xin,resin)));
+			break;
+		case 1:
+			CUDA_SAFE_KERNEL((atimes_kernel<1><<<cudaGridSize,cudaBlockSize>>>(*this,xin,resin)));
+			break;
+		default:
+			break;
+		}
+		CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
+		//atimes_shared = 1;
 	}
 
 
@@ -1309,7 +1655,7 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int i
 
 	setup_res();
 	//printf("lbcg = %i\n",lbcg);
-	if(lbcg == 0)
+	if(!lbcg)
 	{
 		atimes(n1,n2,n3,res,resr,0);
 	}
@@ -1368,6 +1714,7 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int i
 
 }
 
+
 extern "C" void cg3d_gpu_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* n2,int* n3,
 										    float* bin,float* xin,float* tol,float* gpc,int* iter,int* itmax)
 {
@@ -1381,8 +1728,11 @@ extern "C" void cg3d_gpu_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* 
 	solver -> x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
 	solver -> b.cudaMatrixcpy(bin,cudaMemcpyHostToDevice);
 
-	solver -> cg3D(*n1,*n2,*n3,*tol,*iter,*itmax,*lbcg);
+	int tlbcg = *lbcg;
 
+	cudaDeviceSynchronize();
+	solver -> cg3D(*n1,*n2,*n3,*tol,*iter,*itmax,tlbcg);
+	cudaDeviceSynchronize();
 	// copy results back to the cpu
 	solver -> x.cudaMatrixcpy(xin,cudaMemcpyDeviceToHost);
 

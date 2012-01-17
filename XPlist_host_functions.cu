@@ -465,7 +465,7 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 	float zetap;
 
 
-	__shared__ float sdata[10*10*10];
+	__shared__ float sdata[9*9*9];
 
 	while(idx < 9*9*9)
 	{
@@ -695,7 +695,7 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 					atomicAdd(&momprobe.x,vtemp.x);
 					atomicAdd(&momprobe.y,vtemp.y);
 					atomicAdd(&momprobe.z,vtemp.z);
-					atomicAdd(&momprobe.w,0.5f*vr2);
+					atomicAdd(&momprobe.w,0.5*vr2);
 					atomicAdd(&ninner,1);
 
 				}

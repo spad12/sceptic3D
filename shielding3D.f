@@ -71,8 +71,8 @@ c      endif
 			else
 				tlbcg = 0
 			endif
-			call start_timer(t3)
 
+      call start_timer(t3)
 c      call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
 			if(gpurun) then
 				call cg3D_gpu(GPUPsolve,phi,tlbcg,n1,nthused,
@@ -80,7 +80,8 @@ c      call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
       else
 	    call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
       endif
-      call stop_timer(fcalct,t3)
+      call stop_timer(cg3dt,t3)
+
 
 c For debugging, save matrix A and its transpose
       if (lsavemat .and. stepcount.eq.saveatstep) then
@@ -197,6 +198,41 @@ c Set the psi shadow cells to their proper value to ensure periodicity
       end
       
 c******************************************************************
+c **************************************
+
+      subroutine shielding3D_interface(dt,n1)
+
+c     Preconditioning subroutine. if Atilde is the preconditioning
+c     matrix, returns z=Atilde^-1*b.
+
+      include 'piccom.f'
+      include 'errcom.f'
+
+      integer tlbcg
+
+c Convert Fortran logic to C logic
+			if(lbcg) then
+					tlbcg = 1
+			else
+					tlbcg = 0
+			endif
+
+			if(test_atimes.le.test_atimesm) then
+
+
+			call shielding3d_test(GPUPsolve,phi,rho,phiaxis,
+     $   gpc,tlbgc,n1,nthused,npsiused,nrused,dt)
+     		test_atimes = test_atimes + 1
+
+     	else
+
+			call shielding3D(dt,n1)
+
+     	endif
+
+
+      end
+c **************************************
 c******************************************************************
       subroutine cg3D(n1,n2,n3,b,x,tol,iter,itmax)
 
@@ -422,7 +458,7 @@ c **************************************
      $			,0:nthsize,0:npsisize)
 
       if (test_atimes.le.test_atimesm) then
-      	temp = .true.
+      	temp = .false.
 				call atimes_test(GPUPsolve,phi,x,res,
      $			gpc,n1,n2,n3,temp)
 			 test_atimes = test_atimes + 1

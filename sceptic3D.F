@@ -687,17 +687,20 @@ c        For debugging: Save Poisson matrices if flag set and small grid
          endif
       call stop_timer(rhocalct,t5)
 
+
 c     Calculate the potential field, unless it is fixed.
       if (myid2.eq.0.and.infdbl) then
          call fcalc_infdbl(dt)
       elseif (myid2.eq.0.and.debyelen.eq.0) then
          call fcalc(dt)
       else
+
          call shielding_bc(dt,rshield,icolntype,colnwt)
+
          if(.not.cgparallel.and.myid2.eq.0) then
-
+ 						call start_timer(t3)
             call shielding3D(dt,rshield)
-
+						call stop_timer(fcalct,t3)
 #ifdef MPI
          elseif(cgparallel.and.myid2.ge.0) then
             call shielding3D_par(dt,rshield,cg_comm,myid2)
@@ -856,6 +859,7 @@ c            endif
 			call adjtimes(padvncttot,padvnct,tweight)
 			call adjtimes(c2meshttot,c2mesht,tweight)
 			call adjtimes(fcalcttot,fcalct,1.0)
+			call adjtimes(cg3dttot,cg3dt,1.0)
 			call adjtimes(sumreducettot,sumreducet,tweight)
 			call adjtimes(rhocalcttot,rhocalct,tweight)
 			call adjtimes(totalttot,totalt,1.0)
@@ -867,6 +871,7 @@ c            endif
       	write(*,*) "Average Padvnc Time : ",padvncttot
       	write(*,*) "Average Chargeassign Time : ",c2meshttot
       	write(*,*) "Average fcalc Time : ",fcalcttot
+      	write(*,*) "Average cg3d Time : ",cg3dttot
       	write(*,*) "Average sumreduce Time : ",sumreducettot
       	write(*,*) "Average rhocalc Time : ",rhocalcttot
       	write(*,*) "Average Total Time : ",totalttot

@@ -61,7 +61,7 @@ c Grid dimensions
       fparams(10) = Bz
 
       test_atimes = 1
-      test_atimesm = 2
+      test_atimesm = 1
 
 
       call gpu_mesh_init(GPUMesh,phi,phiaxis,rho,rhoDiag,

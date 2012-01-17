@@ -248,11 +248,13 @@ c Data necessary for the orbit tracking
       real totalt,totalttot
       real fcalct,fcalcttot,rhocalct,rhocalcttot
       real sumreducet,sumreducettot,offtime
+      real cg3dt,cg3dttot
       common /timings/padvnct,padvncttot,
      $			c2mesht,c2meshttot,totalt,
      $			totalttot,fcalct,fcalcttot,rhocalct,
      $			rhocalcttot,sumreducet,
-     $			sumreducettot,offtime
+     $			sumreducettot,offtime,
+     $			cg3dt,cg3dttot
 
 c*********************************************************************
 c GPU object pointers

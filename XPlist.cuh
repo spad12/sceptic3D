@@ -30,6 +30,10 @@
 __constant__ float pi_const = 3.1415927;
 __constant__ int cells_per_bin = 8;
 
+__constant__ int ncells_per_binr;
+__constant__ int ncells_per_binth;
+__constant__ int ncells_per_binpsi;
+
 class Particlebin
 {
 public:
@@ -54,6 +58,7 @@ public:
 	float bdyfc,Ti,vd,cd,cB,Bz;
 
 	float dp,dth,dpinv,dthinv,dpsi;
+	float colnwt;
 
 	int lat0,lap0;
 
@@ -81,6 +86,8 @@ public:
 	cudaMatrixf nincell;
 	cudaMatrixf vrincell;
 	cudaMatrixf vr2incell;
+
+	cudaMatrixf fluxofangle,fincellave;
 
 	int nbins;
 	Particlebin* bins;
@@ -970,6 +977,8 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	  result.z = ar*ct - at*st;
 	  result.y = (ar*st+at*ct)*sp+ap*cp;
 	  result.x = (ar*st+at*ct)*cp-ap*sp;
+
+
 
 
 

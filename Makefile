@@ -111,6 +111,7 @@ OBJ := initiate.o \
        shielding3D.o \
        timing.f \
        cg3D_gpu.o \
+       shielding3D_gpu.o \
        gpu_psolve_tests.o \
        stupid_sort.o
 # Reinjection related objects
