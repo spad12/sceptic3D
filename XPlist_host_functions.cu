@@ -1,13 +1,17 @@
-
 #include "XPlist.cuh"
 #include "mkl_trans.h"
+//__constant__ int ncells_per_binr_d;
+//__constant__ int ncells_per_binth_d;
+//__constant__ int ncells_per_binpsi_d;
+
+
 
 
 #define SORT_BLOCK_SIZE 512
 #define SORT_NPTCLS_PER_THREAD 4
-#define CHARGE_ASSIGN_BLOCK_SIZE 512
+#define CHARGE_ASSIGN_BLOCK_SIZE 352
 #define PADVANCE_BLOCK_SIZE 128
-#define PADVNC_NPTCLS_PER_THREAD 8
+#define PADVNC_NPTCLS_PER_THREAD 16
 
 //#define time_run
 
@@ -223,7 +227,7 @@ void XPlist::sort(Particlebin* bins)
 }
 
 __global__
-void find_cell_index_kernel(XPlist particles,Mesh_data mesh)
+void find_cell_index_kernel(XPlist particles,Mesh_data mesh,int3 ncells)
 {
 	int idx = threadIdx.x;
 	int gidx;
@@ -234,7 +238,7 @@ void find_cell_index_kernel(XPlist particles,Mesh_data mesh)
 		gidx = block_start+idx;
 		if(gidx < particles.nptcls)
 		{
-			particles.calc_binid(&mesh,gidx);
+			particles.calc_binid(&mesh,ncells,gidx);
 
 		//	if(gidx >= 8388000)
 			//	printf("particle %i is in bin %i\n",gidx,particles.binid[gidx]);
@@ -268,7 +272,7 @@ void xplist_sort_(long int* XP_ptr,long int* mesh_ptr,int* istep)
 
 
 	CUDA_SAFE_KERNEL((find_cell_index_kernel<<<cudaGridSize,cudaBlockSize>>>
-								 (*particles,mesh_d)));
+								 (*particles,mesh_d,ncells_per_bin_g)));
 
 
 	particles->sort(mesh_d.bins);
@@ -366,7 +370,7 @@ void xplist_transpose_(long int* xplist_d,
 			}
 		}
 		*/
-		MKL_Somatcopy('C','T',6,nptcls,1.0,xplist_h,6,xplist_h_t,nptcls);
+		MKL_Somatcopy('C','T',6,nptcls,1.0f,xplist_h,6,xplist_h_t,nptcls);
 
 		for(int i=0;i<6;i++)
 		{
@@ -421,10 +425,11 @@ void xplist_transpose_(long int* xplist_d,
 
 
 __inline__ __device__
-void write_to_nodes(float* data_out,float data_in,float4 cellf)
+void write_to_nodes(float* data_out,float data_in,float4 cellf,int3 ncells)
 {
 	float* my_node;
-	int bindim = cells_per_bin + 1;
+	int bindimr = ncells.x + 1;
+	int bindimth = ncells.y + 1;
 	float weighted_data;
 
 
@@ -434,7 +439,7 @@ void write_to_nodes(float* data_out,float data_in,float4 cellf)
 		{
 			for(int k=0;k<2;k++)
 			{
-				my_node = data_out+i+bindim*(j+bindim*k);
+				my_node = data_out+i+bindimr*(j+bindimth*k);
 				weighted_data = (((1.0f-i)+(2*i-1)*cellf.x)*((1.0f-j)+(2*j-1)*cellf.y)*((1.0f-k)+(2*k-1)*cellf.z))*data_in;
 
 				atomicAdd(my_node,weighted_data);
@@ -451,12 +456,14 @@ int* bin_census_ptr = &bin_census;
 
 
 __global__
-void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
+void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out,int3 ncells)
 {
 	int idx = threadIdx.x;
 	int gidx = idx;
 	int block_start;
-	const int bindim = cells_per_bin + 1;
+	int bindimr = ncells.x + 1;
+	int bindimth = ncells.y + 1;
+	int bindimpsi = ncells.z + 1;
 	Particlebin my_bin = mesh.bins[blockIdx.x];
 	uint3 binindex;
 	int4 my_cell;
@@ -465,9 +472,9 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 	float zetap;
 
 
-	__shared__ float sdata[9*9*9];
+	__shared__ float sdata[MAX_SMEM_PER_C2MESH];
 
-	while(idx < 9*9*9)
+	while(idx < bindimr*bindimth*bindimpsi)
 	{
 		sdata[idx] = 0;
 
@@ -477,7 +484,7 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 	 idx = threadIdx.x;
 
 
-	binindex = my_bin.get_bin_position();
+	binindex = my_bin.get_bin_position(ncells);
 /*
 	if(idx == 0)
 	{
@@ -488,7 +495,7 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 */
 	__syncthreads();
 
-	my_cell.w = 0;
+	//my_cell.w = 0;
 
 	block_start = my_bin.ifirstp;
 
@@ -498,9 +505,9 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 
 		if((gidx <= my_bin.ilastp)&&(gidx < particles.nptcls))
 		{
-			mesh.ptomesh(particles.px[gidx],particles.py[gidx],particles.pz[gidx],&my_cell,&cellfractions,zetap);
+			mesh.ptomesh<0>(particles.px[gidx],particles.py[gidx],particles.pz[gidx],&my_cell,&cellfractions,zetap);
 
-			my_data_out = sdata + (my_cell.x-(int)(binindex.x)-1) + bindim*(my_cell.y-binindex.y-1+bindim*(my_cell.z-binindex.z-1));
+			my_data_out = sdata + (my_cell.x-(int)(binindex.x)-1) + bindimr*(my_cell.y-binindex.y-1+bindimth*(my_cell.z-binindex.z-1));
 			//my_cell.x -= 1;
 			//my_cell.y -= 1;
 			//my_cell.z -= 1;
@@ -544,7 +551,7 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 
 
 
-			write_to_nodes(my_data_out,1.0f,cellfractions);
+			write_to_nodes(my_data_out,1.0f,cellfractions,ncells);
 
 			/*
 			lcell.x = my_cell.x-1;
@@ -578,11 +585,11 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out)
 
 	__syncthreads();
 
-	while(idx < bindim*bindim*bindim)
+	while(idx < bindimr*bindimth*bindimpsi)
 	{
-		my_cell.z = idx/(bindim*bindim);
-		my_cell.y = idx/bindim - my_cell.z*bindim;
-		my_cell.x = idx - bindim*(my_cell.y+bindim*my_cell.z);
+		my_cell.z = idx/(bindimr*bindimth);
+		my_cell.y = idx/bindimr - my_cell.z*bindimth;
+		my_cell.x = idx - bindimr*(my_cell.y+bindimth*my_cell.z);
 
 		my_cell.x += binindex.x;
 		my_cell.y += binindex.y;
@@ -626,7 +633,7 @@ extern "C" void gpu_chargeassign_(long int* XP_ptr,long int* mesh_ptr,float* psu
 	mesh_d.psum.cudaMatrixSet(0);
 	cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
 	CUDA_SAFE_KERNEL((chargetomesh_kernel<<<cudaGridSize,cudaBlockSize>>>
-								 (*particles,mesh_d,mesh_d.psum)));
+								 (*particles,mesh_d,mesh_d.psum,ncells_per_bin_g)));
 
 	mesh_d.psum.cudaMatrixcpy(psum,cudaMemcpyDeviceToHost);
 #ifdef time_run
@@ -695,7 +702,7 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 					atomicAdd(&momprobe.x,vtemp.x);
 					atomicAdd(&momprobe.y,vtemp.y);
 					atomicAdd(&momprobe.z,vtemp.z);
-					atomicAdd(&momprobe.w,0.5*vr2);
+					atomicAdd(&momprobe.w,0.5f*vr2);
 					atomicAdd(&ninner,1);
 
 				}

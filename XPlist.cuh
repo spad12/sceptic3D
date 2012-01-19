@@ -25,14 +25,14 @@
                 exit(EXIT_FAILURE);                                                  \
     } }
 
-
+#define MAX_SMEM_PER_C2MESH 6144
 
 __constant__ float pi_const = 3.1415927;
 __constant__ int cells_per_bin = 8;
 
-__constant__ int ncells_per_binr;
-__constant__ int ncells_per_binth;
-__constant__ int ncells_per_binpsi;
+
+extern int3 ncells_per_bin_g;
+
 
 class Particlebin
 {
@@ -42,7 +42,7 @@ public:
 	uint binid;
 
 	__device__
-	uint3 get_bin_position(void);
+	uint3 get_bin_position(int3 ncells);
 };
 
 class Mesh_data
@@ -95,8 +95,10 @@ public:
 	cudaMatrixf psum; // psum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
 
 
+	template<int doih>
 	__device__
-	void ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap);
+	float4 ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap);
+
 	__device__
 	int interppsi(float sp,float cp,float* pf);
 	__device__
@@ -216,7 +218,7 @@ public:
 	void sort(Particlebin* bins);
 
 	__device__
-	void calc_binid(Mesh_data* mesh,int idx);
+	void calc_binid(Mesh_data* mesh,int3 ncells,int idx);
 
 	__host__
 	void advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,int &reinject_counter);
@@ -305,19 +307,17 @@ int** XPlist::get_int_ptr(int i)
 }
 
 __inline__ __device__
-void XPlist::calc_binid(Mesh_data* mesh,int idx)
+void XPlist::calc_binid(Mesh_data* mesh,int3 ncells,int idx)
 {
 	int4 icell;
 	float4 cellf;
 	float zetap;
 
-	icell.w = 0;
+	mesh -> ptomesh<0>(px[idx],py[idx],pz[idx],&icell,&cellf,zetap);
 
-	mesh -> ptomesh(px[idx],py[idx],pz[idx],&icell,&cellf,zetap);
-
-	icell.x = (icell.x-1)/cells_per_bin;
-	icell.y = (icell.y-1)/cells_per_bin;
-	icell.z = (icell.z-1)/cells_per_bin;
+	icell.x = (icell.x-1)/ncells.x;
+	icell.y = (icell.y-1)/ncells.y;
+	icell.z = (icell.z-1)/ncells.z;
 
 
 	binid[idx] = zorder(icell.x,icell.y,icell.z);
@@ -433,7 +433,7 @@ uint condense_bits(uint in)
 }
 
 __inline__ __device__
-uint3 Particlebin::get_bin_position(void)
+uint3 Particlebin::get_bin_position(int3 ncells)
 {
 	uint3 result;
 	uint temp;
@@ -447,9 +447,9 @@ uint3 Particlebin::get_bin_position(void)
 	temp = binid & (0x49249249 << 2);
 	result.z = condense_bits((temp >> 2));
 
-	result.x *= cells_per_bin;
-	result.y *= cells_per_bin;
-	result.z *= cells_per_bin;
+	result.x *= ncells.x;
+	result.y *= ncells.y;
+	result.z *= ncells.z;
 
 	return result;
 
@@ -457,12 +457,18 @@ uint3 Particlebin::get_bin_position(void)
 
 
 
-
+template<int doih>
 __inline__ __device__
-void Mesh_data::ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap)
+float4 Mesh_data::ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap)
 {
-	float rsp,rp,cp,sp,hf,hp;
+	float4 ang;
+	float rsp,rp,hf,hp;
 	int ih;
+
+	// ang.x = cp
+	// ang.y = sp
+	// ang.z = ct
+	// ang.w = st
 
 	rsp = (x*x)+(y*y);
 
@@ -472,35 +478,28 @@ void Mesh_data::ptomesh(float x, float y, float z,int4* icell,float4* cellf,floa
 	rsp = sqrt(rsp);
 	if(rsp > 1.0e-9f)
 	{
-		cp = x/rsp;
-		sp = y/rsp;
+		ang.x = x/rsp;
+		ang.y = y/rsp;
 	}
 	else
 	{
-		cp = 1.0f;
-		sp = 0.0f;
+		ang.x = 1.0f;
+		ang.y = 0.0f;
 	}
 
-	icell->z = interppsi(sp,cp,&(cellf->z));
+	icell->z = interppsi(ang.y,ang.x,&(cellf->z));
 
 	// theta sin/cos
-	if(rp > 1.0e-9f)
-	{
-		cp = z/rp;
-		sp = rsp/rp;
-	}
-	else
-	{
-		cp = 1.0f;
-		sp = 0.0f;
-	}
+	ang.z = z/rp;
+	ang.w = rsp/rp;
 
-	icell->y = interpth(cp,&(cellf->y));
+	ang.z = max(-1.0,min(1.0,ang.z));
+
+	icell->y = interpth(ang.z,&(cellf->y));
 
 	icell->x = interpr(rp,&(cellf->x));
 
-	ih = icell->w;
-	if(ih != 0)
+	if(doih)
 	{
 		ih = icell->x + 1;
 		hp = abs(rp - rmesh(1));
@@ -513,6 +512,8 @@ void Mesh_data::ptomesh(float x, float y, float z,int4* icell,float4* cellf,floa
 		icell -> w = ih;
 		cellf -> w = hf;
 	}
+
+	return ang;
 
 
 }
@@ -559,7 +560,7 @@ int Mesh_data::interpth(float ct,float* thf)
 
 	ithl = itpre(ithl);
 	thf[0] = (ct-thmesh(ithl))/(thmesh(ithl+1)-thmesh(ithl));
-
+/*
 	 if(thf[0] < 0.0f)
 	{
 			if(ithl > 1)
@@ -573,7 +574,7 @@ int Mesh_data::interpth(float ct,float* thf)
 
 			thf[0] = (ct-thmesh(ithl))/(thmesh(ithl+1)-thmesh(ithl));
 	}
-
+*/
 	if(thf[0] > 1.0f)
 	{
 		if(ithl+2 <= nthfull)
@@ -582,6 +583,8 @@ int Mesh_data::interpth(float ct,float* thf)
 			thf[0] = (ct-thmesh(ithl))/(thmesh(ithl+1)-thmesh(ithl));
 		}
 	}
+
+	//thf[0] = abs(thf[0]);
 
 
 	return ithl;
@@ -629,6 +632,7 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 	float ldotc;
 	int result = 0;
 
+	/*
 	if(isnan(px2+py2+pz2))
 	{
 		result = 2;
@@ -638,7 +642,7 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 
 		return result;
 	}
-
+	*/
 
 	dx = px2-px1;
 	dy = py2-py1;
@@ -710,6 +714,7 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 {
 	int4 icell;
 	float4 cellf;
+	float4 ang;
 	float3 result;
 	float zetap;
 	float rl,rr,pf,rlm1,rf,hf;
@@ -734,20 +739,20 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
     float phih1t,phih1p,phih1m,phih12;
     float phih1tX,phih1pX,phih1mX,phih12X;
 
-    float rp,rsp,ct,st,cp,sp;
+    //float rp,rsp,ct,st,cp,sp;
+    float &ct = ang.z;
+    float &st = ang.w;
+    float &cp = ang.x;
+    float &sp = ang.y;
 
     float ar,at,ap;
 
-	icell.w = 1;
-
-	ptomesh(px,py,pz,&icell,&cellf,zetap);
-
+	ang = ptomesh<1>(px,py,pz,&icell,&cellf,zetap);
+/*
 	rsp = (px*px+py*py);
 	rp = sqrt(rsp+pz*pz);
 
 	rsp = sqrt(rsp);
-	ct = pz/rp;
-	st = rsp/rp;
 
 	if(rsp > 1.0e-9f)
 	{
@@ -760,18 +765,18 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 		sp = 0.0f;
 	}
 
-	if(rp > 1.0e-9f)
-	{
-		ct = pz/rp;
-		st = rsp/rp;
-	}
-	else
-	{
-		ct = 1.0f;
-		st = 0.0f;
-	}
 
 
+	ct = pz/rp;
+	st = rsp/rp;
+
+	ct = max(-1.0,min(1.0,ct));
+*/
+
+	cp = ang.x;
+	sp = ang.y;
+	ct = ang.z;
+	st = ang.w;
 
 
 	pf = cellf.z;
@@ -827,21 +832,21 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 
     if(ih == nr)
     {
-        phihp1tt=2*phih1tt-phi(ih-1,ith,ipl);
-        phihp1pt=2*phih1pt-phi(ih-1,ithp1,ipl);
-        phihp1mt=2*phih1mt-phi(ih-1,ithm1,ipl);
-        phihp12t=2*phih12t-phi(ih-1,ithp2,ipl);
+        phihp1tt=2.0f*phih1tt-phi(ih-1,ith,ipl);
+        phihp1pt=2.0f*phih1pt-phi(ih-1,ithp1,ipl);
+        phihp1mt=2.0f*phih1mt-phi(ih-1,ithm1,ipl);
+        phihp12t=2.0f*phih12t-phi(ih-1,ithp2,ipl);
 
-        phihp1tp=2*phih1tp-phi(ih-1,ith,iplp1);
-        phihp1pp=2*phih1pp-phi(ih-1,ithp1,iplp1);
-        phihp1mp=2*phih1mp-phi(ih-1,ithm1,iplp1);
-        phihp12p=2*phih12p-phi(ih-1,ithp2,iplp1);
+        phihp1tp=2.0f*phih1tp-phi(ih-1,ith,iplp1);
+        phihp1pp=2.0f*phih1pp-phi(ih-1,ithp1,iplp1);
+        phihp1mp=2.0f*phih1mp-phi(ih-1,ithm1,iplp1);
+        phihp12p=2.0f*phih12p-phi(ih-1,ithp2,iplp1);
 
-        phihp1tm=2*phih1tm-phi(ih-1,ith,iplm1);
-        phihp1pm=2*phih1pm-phi(ih-1,ithp1,iplm1);
+        phihp1tm=2.0f*phih1tm-phi(ih-1,ith,iplm1);
+        phihp1pm=2.0f*phih1pm-phi(ih-1,ithp1,iplm1);
 
-        phihp1t2=2*phih1t2-phi(ih-1,ith,iplp2);
-        phihp1p2=2*phih1p2-phi(ih-1,ithp1,iplp2);
+        phihp1t2=2.0f*phih1t2-phi(ih-1,ith,iplp2);
+        phihp1p2=2.0f*phih1p2-phi(ih-1,ithp1,iplp2);
 
          rr=2*rl-rmesh(ih-1);
     }
@@ -881,10 +886,10 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	  {
 		  if(ih == 1)
 		  {
-	            philm1tt=2*phi(irl,ith,ipl)-phi(ir,ith,ipl);
-	            philm1pt=2*phi(irl,ithp1,ipl)-phi(ir,ithp1,ipl);
-	            philm1tp=2*phi(irl,ith,iplp1)-phi(ir,ith,iplp1);
-	            philm1pp=2*phi(irl,ithp1,iplp1)-phi(ir,ithp1,iplp1);
+	            philm1tt=2.0f*phi(irl,ith,ipl)-phi(ir,ith,ipl);
+	            philm1pt=2.0f*phi(irl,ithp1,ipl)-phi(ir,ithp1,ipl);
+	            philm1tp=2.0f*phi(irl,ith,iplp1)-phi(ir,ith,iplp1);
+	            philm1pp=2.0f*phi(irl,ithp1,iplp1)-phi(ir,ithp1,iplp1);
 
 	            rlm1=2.0f*rl - rr;
 		  }
@@ -977,8 +982,41 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	  result.z = ar*ct - at*st;
 	  result.y = (ar*st+at*ct)*sp+ap*cp;
 	  result.x = (ar*st+at*ct)*cp-ap*sp;
+/*
+	  bool Excessive_Accel;
 
+	  Excessive_Accel = !(abs(result.x)<1.0e5f);
+	  Excessive_Accel = Excessive_Accel||(!(abs(result.y)<1.0e5f));
+	  Excessive_Accel = Excessive_Accel||(!(abs(result.z)<1.0e5f));
 
+	  if(Excessive_Accel)
+	  {
+		  printf("Accel Excessive at %g, %g, %g\n",px,py,pz);
+		  printf("ar, at, ap, ct, st, sp, cp\n%g, %g, %g, %g, %g, %g, %g\n",ar,at,ap,acos(ct),st,sp,cp);
+		  printf("phi at ith and ithp1:\n%g, %g, %g\n%g, %g, %g\n",philm1t,phih1t,phihp1t,philm1p,phih1p,phihp1p);
+		  printf("zetap= %g\n",zetap);
+		  printf("zeta \n%g, %g, %g\n",zeta(ilm1),zeta(ih),zeta(ir));
+		  printf("ih, ith, ipl, iplp1, hf, rf, tflin, pf\n%i, %i, %i, %i, %g, %g, %g, %g\n",ih,ith,ipl,iplp1,hf,rf,tflin,pf);
+		  result.x = 1.0e5f*(((int)result.x) & 0x8000);
+		  result.y = 1.0e5f*(((int)result.y) & 0x8000);
+		  result.z = 1.0e5f*(((int)result.z) & 0x8000);
+	  }
+
+	  if(!(abs(result.x)<1.0e5f))
+	  {
+		  result.x = 1.0e5f*(result.x & 0x8000);
+	  }
+
+	  if(!(abs(result.y)<1.0e5f))
+	  {
+		  result.y = 1.0e5f*(result.y & 0x8000);
+	  }
+
+	  if(!(abs(result.z)<1.0e5f))
+	  {
+		  result.z = 1.0e5f*(result.z & 0x8000);
+	  }
+*/
 
 
 
@@ -997,8 +1035,8 @@ void Mesh_data::probe_diags(float3 pin, float3 vin)
 	vr2 = vin.x*vin.x+vin.y*vin.y+vin.z*vin.z;
 	vr = sqrt(vr2);
 
-	my_cell.w = 0;
-	ptomesh(pin.x,pin.y,pin.z,&my_cell,&cellfractions,zetap);
+	//my_cell.w = 0;
+	ptomesh<0>(pin.x,pin.y,pin.z,&my_cell,&cellfractions,zetap);
 
 
 

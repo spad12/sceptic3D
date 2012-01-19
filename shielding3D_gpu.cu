@@ -387,6 +387,85 @@ extern "C" void shielding3d_gpu_(long int* solverPtr,
 }
 
 
+extern "C" void shielding3d_test_(long int* solverPtr,float* phi,float* rho,float* phiaxis,float* gpc,
+													  	int* lbcg,int* n1,int* n2,int* n3,int* nrused,float* dt)
+{
+	printf("\nTesting GPU shielding3D\n");
+	PoissonSolver* solver;
+
+	solver = ((PoissonSolver*)(*solverPtr));
+
+	int nrsize = solver->nrsize;
+	int nthsize = solver->nthsize;
+	int npsisize = solver->npsisize;
+
+	int iter_gpu;
+	int iter_cpu;
+	float gpu_tol = 1.0e-5;
+
+	float tolerance = 1.0e-2;
+	float total_error = 0.0;
+
+	uint t1,t2;
+	float t_cpu,t_gpu;
+
+	int gidx;
+
+	// Allocate temporary storage for the results.
+	float* phi_gpu = (float*)malloc((nrsize+1)*(nthsize+1)*(npsisize+1)*sizeof(float));
+	float* phiaxis_gpu = (float*)malloc((nrsize+1)*(2)*(npsisize+1)*sizeof(float));
+
+	memcpy(phi_gpu,phi,(nrsize+1)*(nthsize+1)*(npsisize+1)*sizeof(float));
+	memcpy(phiaxis_gpu,phiaxis,(nrsize+1)*(2)*(npsisize+1)*sizeof(float));
+
+
+	// Do gpu atimes
+	start_timer_(&t1);
+	shielding3d_gpu_(solverPtr,phi_gpu,rho,phiaxis_gpu,gpc,dt,lbcg,n1,n2,n3,nrused,&iter_gpu);
+	stop_timer_(&t_gpu,&t1);
+
+
+	// Do cpu cg3d
+	start_timer_(&t2);
+	shielding3d_(*dt,*n1);
+	stop_timer_(&t_cpu,&t2);
+
+
+
+	printf("GPU took %i iterations and %f ms\n",iter_gpu, t_gpu/iter_gpu);
+
+	// Check the results with the results of the host routine
+	for(int i=0;i<(*n1+1);i++)
+	{
+		for(int j=0;j<(*n2+1);j++)
+		{
+			for(int k=0;k<(*n3+1);k++)
+			{
+				gidx = i+(nrsize+1)*(j+(nthsize+1)*k);
+
+				float gpu_data = phi_gpu[gidx];
+				float cpu_data = phi[gidx];
+
+				float terror = 2.0*abs(gpu_data-cpu_data)/max(10.0*tolerance,abs(cpu_data+gpu_data));
+
+				if(terror > tolerance)
+				{
+					//printf("Error shielding3d res %f != %f with error %f at %i, %i, %i\n",gpu_data,cpu_data,terror,i,j,k);
+				}
+
+				total_error += terror;
+			}
+		}
+	}
+
+	// Get the average error
+	total_error /= (float)((*n1)*(*n2)*(*n3));
+	printf("Total shielding3d error = %g\n",total_error);
+
+	free(phi_gpu);
+	free(phiaxis_gpu);
+}
+
 
 
 

@@ -310,6 +310,8 @@ c Set Array sizes, allowed variable.
          nth=nthsize-1
       endif
 
+      call fix_grid_dimensions(nr,nth,npsi)
+
       NRUSED=nr
       NTHUSED=nth
       NRFULL=nr+1
@@ -622,7 +624,7 @@ c If we use floating potential, the slaves may need rhoinf and fluxes
 #ifdef MPI
 c     Needs to bcast rhoinf in any case to get the last line of the
 c     particles diagnostic file right, ie if -w
-         if (cgparallel.and.(linsulate.or.lfloat)) then
+         if ((cgparallel.and.(linsulate.or.lfloat)).or.gpurun) then
             call MPI_BCAST(rhoinf,1,MPI_REAL,0,MPI_COMM_WORLD,ierr)
             call MPI_BCAST(fincellave,nthsize*npsiused,MPI_REAL,0,
      $           MPI_COMM_WORLD,ierr)
@@ -689,18 +691,20 @@ c        For debugging: Save Poisson matrices if flag set and small grid
 
 
 c     Calculate the potential field, unless it is fixed.
+ 			call start_timer(t3)
       if (myid2.eq.0.and.infdbl) then
          call fcalc_infdbl(dt)
       elseif (myid2.eq.0.and.debyelen.eq.0) then
          call fcalc(dt)
       else
-
          call shielding_bc(dt,rshield,icolntype,colnwt)
 
          if(.not.cgparallel.and.myid2.eq.0) then
- 						call start_timer(t3)
+
             call shielding3D(dt,rshield)
-						call stop_timer(fcalct,t3)
+         elseif(gpurun) then
+         		call shielding3D(dt,rshield)
+
 #ifdef MPI
          elseif(cgparallel.and.myid2.ge.0) then
             call shielding3D_par(dt,rshield,cg_comm,myid2)
@@ -711,18 +715,22 @@ c     Calculate the potential field, unless it is fixed.
 
 
   
-
+			call stop_timer(fcalct,t3)
 c     Broadcast back to the slaves.
 #ifdef MPI
+			if(.not.gpurun) then
       call MPI_BCAST(phi,(nrsize+1)*(nthsize+1)*(npsiused+2), MPI_REAL,0
      $     ,MPI_COMM_WORLD,ierr)
       call MPI_BCAST(phiaxis,(nrsize+1)*2*(npsiused+2), MPI_REAL,0
      $     ,MPI_COMM_WORLD,ierr)
+
       call MPI_BCAST(adeficit,1, MPI_REAL,0,MPI_COMM_WORLD,ierr)
 c     Averein is always broadcasted from 0 since it is calculated
 c     in diags, called only by myid=0, not myid2=0
       call MPI_BCAST(averein,1, MPI_REAL,0,MPI_COMM_WORLD,ierr)
 #endif
+
+
 
 
 

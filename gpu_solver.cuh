@@ -70,7 +70,7 @@ public:
 	__host__
 	void allocate(int n1_in, int n2_in, int n3_in);
 	__host__
-	void atimes(int n1,int n2,int n3,cudaMatrixf x_in,cudaMatrixf res_in,int itrnsp);
+	void atimes(int n1,int n2,int n3,cudaMatrixf x_in,cudaMatrixf res_in,const int itrnsp);
 	__host__
 	void asolve(int n1,int n2,int n3,cudaMatrixf b_in, cudaMatrixf z_in);
 	__host__
@@ -82,7 +82,7 @@ public:
 	__host__
 	void eval_sum(void);
 	__host__
-	void cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int itmax,int lbcg);
+	void cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int itmax,const int lbcg);
 	__host__
 	void shielding3D(float dt, int n1, int n2, int n3,int &iter,int nrused,int lbcg);
 

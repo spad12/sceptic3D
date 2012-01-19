@@ -1,9 +1,9 @@
 #include "gpu_solver.cuh"
 #include "XPlist.cuh"
 
-#define ATIMES_DOMAIN_DIMx 9
-#define ATIMES_DOMAIN_DIMy 9
-#define ATIMES_DOMAIN_DIMz 9
+#define ATIMES_DOMAIN_DIMx 16
+#define ATIMES_DOMAIN_DIMy 11
+#define ATIMES_DOMAIN_DIMz 11
 
 #define ATIMES_DOMAIN_DIM 13
 
@@ -1545,10 +1545,10 @@ void PoissonSolver::asolve(int n1_in,int n2_in,int n3_in,cudaMatrixf bin, cudaMa
 
 }
 
-int atimes_shared = 1;
+int atimes_shared = 0;
 
 __host__
-void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMatrixf resin,int itransp)
+void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMatrixf resin,const int itransp)
 {
 	dim3 cudaBlockSize(1,1,1);
 	dim3 cudaGridSize(1,1,1);
@@ -1558,7 +1558,7 @@ void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMa
 
 	if(atimes_shared)
 	{
-		cudaBlockSize.x = 384;
+		cudaBlockSize.x = 512;
 		cudaBlockSize.y = 1;
 		cudaBlockSize.z = 1;
 
@@ -1638,7 +1638,7 @@ void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMa
 }
 
 __host__
-void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int itmax,int lbcg)
+void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int itmax,const int lbcg)
 {
 	n1 = n1_in;
 	n2 = n2_in;
@@ -1655,7 +1655,7 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int i
 
 	setup_res();
 	//printf("lbcg = %i\n",lbcg);
-	if(!lbcg)
+	if(lbcg == 0)
 	{
 		atimes(n1,n2,n3,res,resr,0);
 	}
@@ -1728,10 +1728,23 @@ extern "C" void cg3d_gpu_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* 
 	solver -> x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
 	solver -> b.cudaMatrixcpy(bin,cudaMemcpyHostToDevice);
 
-	int tlbcg = *lbcg;
+	bool tlbcg = 0;
+
+	if((*lbcg) == 1)
+	{
+		tlbcg = 1;
+	}
 
 	cudaDeviceSynchronize();
-	solver -> cg3D(*n1,*n2,*n3,*tol,*iter,*itmax,tlbcg);
+	if(tlbcg)
+	{
+		solver -> cg3D(*n1,*n2,*n3,*tol,*iter,*itmax,1);
+	}
+	else
+	{
+		solver -> cg3D(*n1,*n2,*n3,*tol,*iter,*itmax,0);
+	}
+
 	cudaDeviceSynchronize();
 	// copy results back to the cpu
 	solver -> x.cudaMatrixcpy(xin,cudaMemcpyDeviceToHost);

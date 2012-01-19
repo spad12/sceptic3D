@@ -31,8 +31,8 @@ void populate_ptomesh_stuff(XPlist particles, Mesh_data mesh,int4* indexes,float
 
 	if(gidx < nptcls)
 	{
-		local_index.w = 1;
-		mesh.ptomesh(particles.px[gidx],particles.py[gidx],particles.pz[gidx],&local_index,&local_fraction,zetap);
+		//local_index.w = 1;
+		mesh.ptomesh<1>(particles.px[gidx],particles.py[gidx],particles.pz[gidx],&local_index,&local_fraction,zetap);
 
 		indexes[gidx] = local_index;
 		fractions[gidx] = local_fraction;

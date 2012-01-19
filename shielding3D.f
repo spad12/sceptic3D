@@ -198,41 +198,6 @@ c Set the psi shadow cells to their proper value to ensure periodicity
       end
       
 c******************************************************************
-c **************************************
-
-      subroutine shielding3D_interface(dt,n1)
-
-c     Preconditioning subroutine. if Atilde is the preconditioning
-c     matrix, returns z=Atilde^-1*b.
-
-      include 'piccom.f'
-      include 'errcom.f'
-
-      integer tlbcg
-
-c Convert Fortran logic to C logic
-			if(lbcg) then
-					tlbcg = 1
-			else
-					tlbcg = 0
-			endif
-
-			if(test_atimes.le.test_atimesm) then
-
-
-			call shielding3d_test(GPUPsolve,phi,rho,phiaxis,
-     $   gpc,tlbgc,n1,nthused,npsiused,nrused,dt)
-     		test_atimes = test_atimes + 1
-
-     	else
-
-			call shielding3D(dt,n1)
-
-     	endif
-
-
-      end
-c **************************************
 c******************************************************************
       subroutine cg3D(n1,n2,n3,b,x,tol,iter,itmax)
 
