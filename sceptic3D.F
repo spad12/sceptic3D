@@ -138,6 +138,9 @@ c     drifting Maxwellian reinjection.
 c Signal that fvcom is not initialized. After initialization it is .ne.0
       qthfv(nthfvsize)=0.
 
+c Set the minimum bin dimension for gpu run
+			minbins=8
+
       
 
 c Deal with arguments
@@ -277,6 +280,9 @@ c        For debugging, give option to save A and/or phi
          if(string(1:5) .eq. '--ap0') lap0=.true.
          if(string(1:10) .eq. '--localinj') localinj=.true.
          if(string(1:10) .eq. '--gpurun') gpurun=.true.
+         if(string(1:9) .eq. '--minbins')then
+         	  read(string(10:),*)minbins
+         endif
         
  1    continue
  3    continue
@@ -310,7 +316,7 @@ c Set Array sizes, allowed variable.
          nth=nthsize-1
       endif
 
-      call fix_grid_dimensions(nr,nth,npsi)
+      call fix_grid_dimensions(nr,nth,npsi,minbins)
 
       NRUSED=nr
       NTHUSED=nth
@@ -559,10 +565,11 @@ c Assign charge to mesh
          call chargetomesh_gpu(GPUXPlist,GPUMesh,i)
 
 c Collect the partial sums of moments of distribution.
+      call start_timer(t4)
 #ifdef MPI
       call MPI_BARRIER(MPI_COMM_WORLD,ierr)
 #endif
-      call start_timer(t4)
+
          call sumreduce()
          call aveupstep()
       call stop_timer(sumreducet,t4)
@@ -624,7 +631,7 @@ c If we use floating potential, the slaves may need rhoinf and fluxes
 #ifdef MPI
 c     Needs to bcast rhoinf in any case to get the last line of the
 c     particles diagnostic file right, ie if -w
-         if ((cgparallel.and.(linsulate.or.lfloat)).or.gpurun) then
+         if ((cgparallel.and.(linsulate.or.lfloat))) then
             call MPI_BCAST(rhoinf,1,MPI_REAL,0,MPI_COMM_WORLD,ierr)
             call MPI_BCAST(fincellave,nthsize*npsiused,MPI_REAL,0,
      $           MPI_COMM_WORLD,ierr)
@@ -702,8 +709,6 @@ c     Calculate the potential field, unless it is fixed.
          if(.not.cgparallel.and.myid2.eq.0) then
 
             call shielding3D(dt,rshield)
-         elseif(gpurun) then
-         		call shielding3D(dt,rshield)
 
 #ifdef MPI
          elseif(cgparallel.and.myid2.ge.0) then
@@ -715,10 +720,9 @@ c     Calculate the potential field, unless it is fixed.
 
 
   
-			call stop_timer(fcalct,t3)
+
 c     Broadcast back to the slaves.
 #ifdef MPI
-			if(.not.gpurun) then
       call MPI_BCAST(phi,(nrsize+1)*(nthsize+1)*(npsiused+2), MPI_REAL,0
      $     ,MPI_COMM_WORLD,ierr)
       call MPI_BCAST(phiaxis,(nrsize+1)*2*(npsiused+2), MPI_REAL,0
@@ -817,6 +821,8 @@ c     default we also evaluate at the probe surface
           
          endif
 
+         call stop_timer(fcalct,t3)
+
 c     Main particle advance, including collisions.
          call padvnc(GPUXPlist,GPUMesh,
      $ 			dt,icolntype,colnwt,i,maccel,ierad)
@@ -865,9 +871,12 @@ c            endif
 			tweight=(1.0*npart)/(1.0*nparttotal)
 			tweight = 1.0
 			call adjtimes(padvncttot,padvnct,tweight)
+			call adjtimes(reinjectttot,reinjectt,tweight)
 			call adjtimes(c2meshttot,c2mesht,tweight)
-			call adjtimes(fcalcttot,fcalct,1.0)
-			call adjtimes(cg3dttot,cg3dt,1.0)
+			call adjtimes(chassttot,chasst,tweight)
+			call adjtimes(sortttot,sortt,tweight)
+			call adjtimes(fcalcttot,fcalct,tweight)
+			call adjtimes(cg3dttot,cg3dt,tweight)
 			call adjtimes(sumreducettot,sumreducet,tweight)
 			call adjtimes(rhocalcttot,rhocalct,tweight)
 			call adjtimes(totalttot,totalt,1.0)
@@ -877,7 +886,10 @@ c            endif
 				write(*,*)'Average Subroutine Run Times(ns) ',
      $				 'per particle per timestep'
       	write(*,*) "Average Padvnc Time : ",padvncttot
-      	write(*,*) "Average Chargeassign Time : ",c2meshttot
+      	write(*,*) "Average Reinject Time : ",reinjectttot
+      	write(*,*) "Average Chargetomesh Time : ",c2meshttot
+      	write(*,*) "Average Sort Time : ",sortttot
+      	write(*,*) "Average Chargeassign Time : ",chassttot
       	write(*,*) "Average fcalc Time : ",fcalcttot
       	write(*,*) "Average cg3d Time : ",cg3dttot
       	write(*,*) "Average sumreduce Time : ",sumreducettot

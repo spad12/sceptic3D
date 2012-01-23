@@ -1,9 +1,9 @@
 #include "gpu_solver.cuh"
 #include "XPlist.cuh"
 
-#define ATIMES_DOMAIN_DIMx 16
-#define ATIMES_DOMAIN_DIMy 11
-#define ATIMES_DOMAIN_DIMz 11
+#define ATIMES_DOMAIN_DIMx 12
+#define ATIMES_DOMAIN_DIMy 12
+#define ATIMES_DOMAIN_DIMz 12
 
 #define ATIMES_DOMAIN_DIM 13
 

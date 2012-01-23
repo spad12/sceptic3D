@@ -13,7 +13,7 @@ c CIC definitions
       parameter (LCIC=.true.)
       integer nrsize,nthsize,npsisize
 c These correspond to nrfull, nthfull.and npsifull
-      parameter (nrsize=97,nthsize=97,npsisize=97)
+      parameter (nrsize=257,nthsize=129,npsisize=129)
 c Positions and velocities of particles (6-d phase-space).
       real xp(ndim,npartmax)
       real vzinit(npartmax)
@@ -41,10 +41,12 @@ c Highest occupied particle slot.
       integer myid,numprocs
       real rmtoz
       logical gpurun
+      integer minbins
       common /piccom/xp,npart,vzinit,dtprec,phi,rho,rhoDiag,cerr,bdyfc
      $     ,Ti,vd,cd,cB,diags,ninjcomp,lplot,ldist,linsulate,lfloat
      $     ,lat0,lap0 ,localinj,lfixedn,myid,numprocs,rmtoz,ipf,iocprev
-     $     ,Bz,lsubcycle,verlet,collcic,phiaxis,gpurun,nparttotal
+     $     ,Bz,lsubcycle,verlet,collcic,phiaxis,gpurun,minbins
+     $			,nparttotal
 
 
 c *******************************************************************
@@ -140,7 +142,7 @@ c from 0 to 9)
 c********************************************************************
 c diagnostic data
       integer nvmax,nrein,nreintry,ninner,nstepmax
-      parameter (nvmax=60,nstepmax=10001)
+      parameter (nvmax=60,nstepmax=1001)
       real nvdiag(nvmax),nvdiagave(nvmax),vdiag(nvmax)
       real vrdiagin(nvmax),vtdiagin(nvmax)
       real vrange
@@ -209,8 +211,9 @@ c Poisson coefficients for iterative solution, etc.
       real gpc(0:nthsize,0:npsisize,1:5)
 c     Flag indicating to use biconjugate gradient method (not min. res.)
       logical lbcg
+      integer icg3dcall
       common /poisson/debyelen,vprobe,Ezext,apc,bpc,cpc,dpc,fpc,epc,gpc
-     $  ,lbcg
+     $  ,lbcg,icg3dcall
 c*********************************************************************
 c Smoothing steps
       integer nstepsave,nsamax,diagsamp
@@ -244,7 +247,10 @@ c Data necessary for the orbit tracking
       common /reinjectcom/icurrreinject,xpreinject,ilastgen
 
       real padvnct,padvncttot
+      real reinjectt,reinjectttot
       real c2mesht,c2meshttot
+      real chasst,chassttot
+      real sortt,sortttot
       real totalt,totalttot
       real fcalct,fcalcttot,rhocalct,rhocalcttot
       real sumreducet,sumreducettot,offtime
@@ -254,7 +260,9 @@ c Data necessary for the orbit tracking
      $			totalttot,fcalct,fcalcttot,rhocalct,
      $			rhocalcttot,sumreducet,
      $			sumreducettot,offtime,
-     $			cg3dt,cg3dttot
+     $			cg3dt,cg3dttot,chasst,
+     $			chassttot,sortt,sortttot,
+     $			reinjectt,reinjectttot
 
 c*********************************************************************
 c GPU object pointers

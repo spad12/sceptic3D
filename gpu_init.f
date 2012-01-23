@@ -63,6 +63,7 @@ c Grid dimensions
       test_atimes = 1
       test_atimesm = 1
 
+			icg3dcall = 1
 
       call gpu_mesh_init(GPUMesh,phi,phiaxis,rho,rhoDiag,
      $						r,rcc,th,tcc,thang,pcc,volinv,zeta,zetahalf,

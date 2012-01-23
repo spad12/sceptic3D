@@ -1,5 +1,7 @@
 #include "XPlist.cuh"
 #include "mkl_trans.h"
+
+#include "gpu_timing.cuh"
 //__constant__ int ncells_per_binr_d;
 //__constant__ int ncells_per_binth_d;
 //__constant__ int ncells_per_binpsi_d;
@@ -178,6 +180,10 @@ void XPlist::sort(Particlebin* bins)
 	// Populate the particle index array
 	CUDA_SAFE_KERNEL((write_xpindex_array<<<cudaGridSize,cudaBlockSize>>>
 								 (particle_id,nptcls)));
+#ifdef PROFILE_TIMERS
+	int thrust_sort_timer = get_timer_int("thrust_sort");
+	g_timers[thrust_sort_timer].start_timer();
+#endif
 
 #ifndef STUPID_SORT
 	// wrap raw device pointers with a device_ptr
@@ -192,6 +198,12 @@ void XPlist::sort(Particlebin* bins)
 	cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
 #else
 	stupid_sort(binid,particle_id,nptcls);
+#endif
+
+#ifdef PROFILE_TIMERS
+	g_timers[thrust_sort_timer].stop_timer();
+	int reorder_pdata = get_timer_int("reorder_particle_list");
+	g_timers[reorder_pdata].start_timer();
 #endif
 
 	// Reorder the particle data
@@ -218,11 +230,21 @@ void XPlist::sort(Particlebin* bins)
 		*(get_int_ptr(i)) = (int*)odata;
 		buffer = idata;
 	}
+#ifdef PROFILE_TIMERS
+	g_timers[reorder_pdata].stop_timer();
+	int find_bin_boundaries_timer = get_timer_int("find_bin_boundaries");
+	g_timers[find_bin_boundaries_timer].start_timer();
+#endif
 
+	// Find the cell-bin boundaries in the particle list
 	CUDA_SAFE_KERNEL((find_bin_boundaries<<<cudaGridSize,cudaBlockSize>>>
 								 (*this,bins)));
 
 	cudaDeviceSynchronize();
+
+#ifdef PROFILE_TIMERS
+	g_timers[find_bin_boundaries_timer].stop_timer();
+#endif
 
 }
 
@@ -270,10 +292,15 @@ void xplist_sort_(long int* XP_ptr,long int* mesh_ptr,int* istep)
 	CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 	cudaDeviceSynchronize();
 
-
+#ifdef PROFILE_TIMERS
+	int find_cell_index_timer = get_timer_int("find_cell_index_kernel");
+	g_timers[find_cell_index_timer].start_timer();
+#endif
 	CUDA_SAFE_KERNEL((find_cell_index_kernel<<<cudaGridSize,cudaBlockSize>>>
 								 (*particles,mesh_d,ncells_per_bin_g)));
-
+#ifdef PROFILE_TIMERS
+	g_timers[find_cell_index_timer].stop_timer();
+#endif
 
 	particles->sort(mesh_d.bins);
 
@@ -632,8 +659,15 @@ extern "C" void gpu_chargeassign_(long int* XP_ptr,long int* mesh_ptr,float* psu
 
 	mesh_d.psum.cudaMatrixSet(0);
 	cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+#ifdef PROFILE_TIMERS
+	int c2mesh_timer = get_timer_int("chargetomesh_kernel");
+	g_timers[c2mesh_timer].start_timer();
+#endif
 	CUDA_SAFE_KERNEL((chargetomesh_kernel<<<cudaGridSize,cudaBlockSize>>>
 								 (*particles,mesh_d,mesh_d.psum,ncells_per_bin_g)));
+#ifdef PROFILE_TIMERS
+	g_timers[c2mesh_timer].stop_timer();
+#endif
 
 	mesh_d.psum.cudaMatrixcpy(psum,cudaMemcpyDeviceToHost);
 #ifdef time_run
@@ -820,9 +854,15 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 	// Move the particles
 	//printf("Moving the particles on the gpu\n");
 	cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+#ifdef PROFILE_TIMERS
+	int my_timer = get_timer_int("xplist_advance_kernel");
+	g_timers[my_timer].start_timer();
+#endif
 	CUDA_SAFE_KERNEL((xplist_advance_kernel<<<cudaGridSize,cudaBlockSize>>>
 								 (*this,mesh,diags,dt)));
-
+#ifdef PROFILE_TIMERS
+	g_timers[my_timer].stop_timer();
+#endif
 	// Copy the didileave array so that we can do a scan without messing up our earlier results
 	CUDA_SAFE_CALL(cudaMemcpy(didileave_scan,didileave,nptcls*sizeof(int),cudaMemcpyDeviceToDevice));
 
@@ -923,6 +963,10 @@ extern "C" void gpu_padvnc_(long int* XP_ptr,long int* mesh_ptr,
 	cutStartTimer(timer);
 #endif
 
+#ifdef PROFILE_TIMERS
+	g_timers[itimer_padvnc].start_timer();
+#endif
+
 	XPlist* particles = (XPlist*)(*XP_ptr);
 	Mesh_data mesh_d = *(Mesh_data*)(*mesh_ptr);
 
@@ -963,6 +1007,10 @@ extern "C" void gpu_padvnc_(long int* XP_ptr,long int* mesh_ptr,
 
 	diags_h.free();
 	diags_d.free();
+
+#ifdef PROFILE_TIMERS
+	g_timers[itimer_padvnc].stop_timer();
+#endif
 
 #ifdef time_run
 	cutStopTimer(timer);

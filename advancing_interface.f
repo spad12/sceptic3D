@@ -7,7 +7,7 @@ c Advance the particles
 
 			integer*8 GPUXPlist ! dummy variable to carry pointer to XPdata
       integer*8 GPUMesh ! dummy variable to carry pointer to mesh_data
-      integer step,maccel,icolntype,ierad,timer
+      integer step,maccel,icolntype,ierad,timer,timer2
       real dt,dtin,colnwt
       real timeout
 c Common data:
@@ -23,10 +23,10 @@ c Common data:
          ilastgen = 1
          icurrreinject = npreinject
       endif
-
+			call start_timer(timer2)
       call orbitreinjectgen(xpreinject,npreinject,icurrreinject,
      $         ilastgen,dtin)
-
+			call stop_timer(reinjectt,timer2)
       if(step.eq.1)then
          ilastgen = 1
          icurrreinject = 1
@@ -34,9 +34,9 @@ c Common data:
 
       !call test_gpu_getaccel(GPUXPlist,GPUMesh,phi)
 
+
+
 			call start_timer(timer)
-
-
 			if(gpurun)then
 			  icurrreinject = icurrreinject  - 1
 c Call the GPU particle advance

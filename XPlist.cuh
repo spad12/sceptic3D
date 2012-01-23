@@ -15,6 +15,7 @@
 #include "cudamatrix_types.cuh"
 
 
+
 #  define CUDA_SAFE_KERNEL(call) {                                         \
 	call;																					\
 	cudaDeviceSynchronize();														\

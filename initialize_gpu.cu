@@ -10,15 +10,15 @@ extern "C" void pick_gpu_(int* myid,int* mynpart)
 
 	int ndevices;
 	cudaGetDeviceCount(&ndevices);
-	int my_device = abs(*myid-1);
+	int my_device = abs(*myid);
 
 	if((*myid) < 2)
 	{
 		// This is so that we aren't running the solver on the gpu that is used for display
-		if(*myid == 0)
-			my_device == 1;
+		if((*myid) == 0)
+			my_device = 1;
 		else
-			my_device == 0;
+			my_device = 0;
 	}
 
 	if(*myid < ndevices)
@@ -63,7 +63,7 @@ int fixdim(int &dimin,int maxd,int minb)
 
 }
 
-extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi)
+extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi,int* minbins_in)
 {
 	// This function checks and fixes the grid dimensions so
 	// that there are an equal number of particle bins in each dimension
@@ -73,7 +73,15 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi)
 	int n_cells_th;
 	int n_cells_psi;
 
-	int minbins = 8; // must be set here
+
+
+	int minbins = max(2,*minbins_in); // must be set here
+
+	// check to make sure minbins is a power of 2
+	while(!((minbins != 0) && ((minbins & (~minbins + 1)) == minbins)))
+	{
+		minbins++;
+	}
 
 	int maxdim = floor(pow(((float)MAX_SMEM_PER_C2MESH),(1.0/3.0)));
 
@@ -94,21 +102,27 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi)
 		(*nr)++;
 	}
 
-	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
+//	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
 
 	n_cells_psi = fixdim(*npsi,maxdim,minbins);
 	n_cells_th = fixdim(*nth,maxdim,minbins);
+
+	maxdim = MAX_SMEM_PER_C2MESH/(n_cells_psi*n_cells_th);
+
 	n_cells_r = fixdim(*nr,maxdim,minbins);
 
 	// Now make sure that all the dimensions have the same number of bins
 	minbins = max((*nr/n_cells_r),max((*nth/n_cells_th),(*npsi/n_cells_psi)));
-	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
+//	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
+	maxdim = sqrt(n_cells_psi*n_cells_th);
 
 	n_cells_psi = fixdim(*npsi,maxdim,minbins);
 	n_cells_th = fixdim(*nth,maxdim,minbins);
+
+	maxdim = MAX_SMEM_PER_C2MESH/(n_cells_psi*n_cells_th);
 	n_cells_r = fixdim(*nr,maxdim,minbins);
 
-	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
+//	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
 
 	ncells_per_bin_g.x = n_cells_r;
 	ncells_per_bin_g.y = n_cells_th;

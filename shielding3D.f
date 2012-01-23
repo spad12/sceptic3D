@@ -82,6 +82,8 @@ c      call cg3D(n1,nthused,npsiused,b,x,dconverge,iter,maxits)
       endif
       call stop_timer(cg3dt,t3)
 
+      icg3dcall = icg3dcall+1
+
 
 c For debugging, save matrix A and its transpose
       if (lsavemat .and. stepcount.eq.saveatstep) then

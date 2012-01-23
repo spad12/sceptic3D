@@ -12,9 +12,9 @@ c      argument list
       integer*8 GPUMesh ! dummy variable to carry pointer to mesh_data
       integer istep
       real timeout
-      integer timer
+      integer timer,timer2,timer3
 
-      call start_timer(timer)
+
 
 
 			if(gpurun) then
@@ -24,10 +24,12 @@ C Transpose the Particle Array to the gpu
      $      xp,dtprec,vzinit,ipf,npartmax,ndim,0,0)
 				endif
 
+				call start_timer(timer)
+
 C Sort the particle list
-
+					call start_timer(timer2)
 					call XPlist_sort(GPUXPlist,GPUMesh,istep)
-
+ 				  call stop_timer(sortt,timer2)
 
 
 
@@ -38,13 +40,15 @@ c     $			,dtprec,vzinit,ipf,npartmax,ndim,1,0)
      		!call test_gpu_ptomesh(GPUXPlist,GPUMesh)
 
 C Charge Assign
+				call start_timer(timer3)
 				call gpu_chargeassign(GPUXPlist,GPUMesh,psum)
-
+				call stop_timer(chasst,timer3)
 				!call test_chargetomesh(GPUXPlist,GPUMesh,psum)
-
+ 				call stop_timer(c2mesht,timer)
 			else
 
 c Assign charge to mesh
+				call start_timer(timer)
       	call chargetomesh(xp,ipf,
      $      r,th,pcc,irpre,itpre,ippre,
      $      zeta,zetahalf,
@@ -59,10 +63,12 @@ c Assign charge to mesh
      $      nrsize,nthsize,npsisize,
      $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
 
+     	call stop_timer(c2mesht,timer)
+
       endif
 
 
-      call stop_timer(c2mesht,timer)
+
 
       end
 
