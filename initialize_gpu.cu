@@ -83,7 +83,7 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi,int* minbins_in)
 		minbins++;
 	}
 
-	int maxdim = floor(pow(((float)MAX_SMEM_PER_C2MESH),(1.0/3.0)));
+	int maxdim = floor(pow(((double)MAX_SMEM_PER_C2MESH),(1.0/3.0)));
 
 	// Are we divisible by mindim?
 	while((*npsi)%minbins != 0)

@@ -48,8 +48,8 @@ else
 	CUDAFORTRAN_FLAGS += -lstdc++
 endif
 	
-CUDA_INCLUDE_PATH	:= -I./cutil 
-CUDAFORTRAN_FLAGS += -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -L./cutil -lcutil_x86_64 $(CUDA_INCLUDE_PATH) 
+CUDA_INCLUDE_PATH	:= -I./cutil/common/inc
+CUDAFORTRAN_FLAGS += -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -L./cutil/lib -lcutil_x86_64 $(CUDA_INCLUDE_PATH) 
 
 
 
@@ -145,7 +145,6 @@ OBJ := initiate.o \
        timing.f \
        gpu_timing.o \
        cg3D_gpu.o \
-       gpu_psolve_tests.o \
        stupid_sort.o
 # Reinjection related objects
 OBJ += orbitinject.o \
@@ -153,7 +152,8 @@ OBJ += orbitinject.o \
        maxreinject.o
        
 # Objects for GPU testing
-OBJ += gpu_tests.o
+OBJ += gpu_psolve_tests.o \
+		 gpu_tests.o
 
 # Objects for HDF version of sceptic3D
 OBJHDF := $(OBJ) \
@@ -170,19 +170,19 @@ OBJMPIHDF := $(OBJMPI) \
           outputhdf.o
 
 # Default target is serial sceptic3D without HDF support
-sceptic3D : sceptic3D.F piccom.f errcom.f $(OBJ) ./accis/libaccisX.a
+sceptic3D : sceptic3D.F piccom.f errcom.f $(OBJ) ./accis/libaccisX.a ./cutil/lib/libcutil_x86_64.a
 	$(G77) $(OPTCOMP) -o sceptic3D sceptic3D.F $(OBJ) $(LIB)
 
 # sceptic3D with HDF
-sceptic3Dhdf : sceptic3D.F piccom.f errcom.f $(OBJHDF) ./accis/libaccisX.a
+sceptic3Dhdf : sceptic3D.F piccom.f errcom.f $(OBJHDF) ./accis/libaccisX.a ./cutil/lib/libcutil_x86_64.a
 	$(G77) $(OPTCOMPHDF) -o sceptic3Dhdf sceptic3D.F $(OBJHDF) $(LIBHDF)
 
 # sceptic3D with MPI
-sceptic3Dmpi : sceptic3D.F piccom.f errcom.f piccomcg.f $(OBJMPI) ./accis/libaccisX.a
+sceptic3Dmpi : sceptic3D.F piccom.f errcom.f piccomcg.f $(OBJMPI) ./accis/libaccisX.a ./cutil/lib/libcutil_x86_64.a
 	$(G77) $(OPTCOMPMPI) -o sceptic3Dmpi sceptic3D.F $(OBJMPI) $(LIB)
 
 # sceptic3D with MPI & HDF
-sceptic3Dmpihdf : sceptic3D.F piccom.f errcom.f piccomcg.f $(OBJMPIHDF) ./accis/libaccisX.a
+sceptic3Dmpihdf : sceptic3D.F piccom.f errcom.f piccomcg.f $(OBJMPIHDF) ./accis/libaccisX.a ./cutil/lib/libcutil_x86_64.a
 	$(G77) $(OPTCOMPMPIHDF) -o sceptic3Dmpihdf sceptic3D.F $(OBJMPIHDF) $(LIBHDF)
 
 
@@ -204,6 +204,9 @@ $(DIRHDF)/lib/libhdf5.a :
 # Other rules
 ./accis/libaccisX.a : ./accis/*.f
 	make -C accis CC=$(CC)
+
+./cutil/lib/libcutil_x86_64.a : ./cutil/common/Makefile
+	make -C cutil/common CC=$(CC)
 
 orbitint : orbitint.f coulflux.o $(OBJ) ./accis/libaccisX.a
 	$(G77) $(OPTCOMP) -o orbitint orbitint.f $(OBJ) coulflux.o $(LIB)
@@ -287,6 +290,9 @@ cleanaccis :
 	make -C accis clean
 	-rm ./accis/libaccisX.a
 
+cleancutil :
+	make -C cutil/common clean
+
 cleanhdf :
 	make -C $(DIRHDF) clean
 	-rm $(DIRHDF)/lib/libhdf5.a
@@ -296,6 +302,7 @@ cleanall :
 	make cleandata
 	make cleanaccis
 	make cleanhdf
+	make cleancutil
 
 ftnchek :
 	ftnchek -nocheck -nof77 -calltree=text,no-sort -mkhtml -quiet -brief sceptic3D.F *.f
