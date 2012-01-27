@@ -49,6 +49,7 @@ C Charge Assign
 
 c Assign charge to mesh
 				call start_timer(timer)
+				call start_timer(timer3)
       	call chargetomesh(xp,ipf,
      $      r,th,pcc,irpre,itpre,ippre,
      $      zeta,zetahalf,
@@ -62,7 +63,7 @@ c Assign charge to mesh
      $      nr,nth,npsi,
      $      nrsize,nthsize,npsisize,
      $      nrpre,ntpre,nppre,nrused,nthused,npsiused)
-
+		  call stop_timer(chasst,timer3)
      	call stop_timer(c2mesht,timer)
 
       endif

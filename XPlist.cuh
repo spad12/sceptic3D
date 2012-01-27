@@ -1,4 +1,3 @@
-#include <mathimf.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
@@ -33,6 +32,12 @@ __constant__ int cells_per_bin = 8;
 
 
 extern int3 ncells_per_bin_g;
+
+
+extern "C" __host__
+void xplist_transpose_(long int* xplist_d,
+									   float* xplist_h,float* dt_prec,float* vzinit,int* ipf,
+									   int* npartmax,int* ndims,int* direction,int* xpdata_only);
 
 
 class Particlebin

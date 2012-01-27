@@ -137,6 +137,7 @@ extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* a
 	Mesh_data mesh_d = *(Mesh_data*)(*mesh_ptr);
 	PoissonSolver* solver = (PoissonSolver*)malloc(sizeof(PoissonSolver));
 
+	printf("Setting up Psolve Arrays\n");
 	solver->phi = mesh_d.phi;
 	solver->rho = mesh_d.rho;
 	solver->phiaxis = mesh_d.phiaxis;
@@ -151,7 +152,7 @@ extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* a
 	solver->fpc.cudaMatrixcpy(fpc,cudaMemcpyHostToDevice);
 	solver->gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
 
-	printf("Setting up Psolve Arrays\n");
+
 
 	*PsolvPtr = (long int)solver;
 

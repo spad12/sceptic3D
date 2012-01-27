@@ -11,7 +11,7 @@
 
 #define SORT_BLOCK_SIZE 512
 #define SORT_NPTCLS_PER_THREAD 4
-#define CHARGE_ASSIGN_BLOCK_SIZE 352
+#define CHARGE_ASSIGN_BLOCK_SIZE 512
 #define PADVANCE_BLOCK_SIZE 128
 #define PADVNC_NPTCLS_PER_THREAD 16
 
@@ -98,13 +98,15 @@ void reorder_particle_data(float* odata, float* idata,int* index_array,int nptcl
 	int idx = threadIdx.x;
 	int gidx = idx + blockIdx.x*blockDim.x;
 
-	int ogidx;
 
-	if(gidx < nptcls)
+
+	while(gidx < nptcls)
 	{
-		ogidx = index_array[gidx];
+		int ogidx = index_array[gidx];
 		//printf("particle %i now in slot %i\n",ogidx,gidx);
 		odata[gidx] = idata[ogidx];
+
+		gidx += blockDim.x*gridDim.x;
 	}
 }
 __global__
@@ -113,9 +115,10 @@ void write_xpindex_array(int* index_array,int nptcls)
 	int idx = threadIdx.x;
 	int gidx = blockIdx.x*blockDim.x+idx;
 
-	if(gidx < nptcls)
+	while(gidx < nptcls)
 	{
 		index_array[gidx] = gidx;
+		gidx += blockDim.x*gridDim.x;
 	}
 }
 
@@ -131,39 +134,46 @@ void find_bin_boundaries(XPlist particles,Particlebin* bins)
 	uint binindex_left;
 	uint binindex_right;
 
-	if((gidx < nptcls-1)&&(gidx > 0))
+	while(gidx < nptcls)
 	{
-		binindex = particles.binid[gidx];
-		binindex_left = particles.binid[max(gidx-1,0)];
-		binindex_right = particles.binid[min((gidx+1),(nptcls-1))];
-
-		if(binindex_left != binindex)
+		if(gidx == 0)
 		{
+			binindex = particles.binid[gidx];
 			bins[binindex].ifirstp = gidx;
-			bins[binindex_left].ilastp = gidx-1;
 			bins[binindex].binid = binindex;
 		}
-
-		if(binindex_right != binindex)
+		else if(gidx == nptcls-1)
 		{
+			binindex = particles.binid[gidx];
 			bins[binindex].ilastp = gidx;
-			bins[binindex_right].ifirstp = gidx+1;
 			bins[binindex].binid = binindex;
 		}
+		else
+		{
+			binindex = particles.binid[gidx];
+			binindex_left = particles.binid[max(gidx-1,0)];
+			binindex_right = particles.binid[min((gidx+1),(nptcls-1))];
 
-	}
+			if(binindex_left != binindex)
+			{
+				bins[binindex].ifirstp = gidx;
+				bins[binindex_left].ilastp = gidx-1;
+				bins[binindex].binid = binindex;
+			}
 
-	if(gidx == 0)
-	{
-		binindex = particles.binid[gidx];
-		bins[binindex].ifirstp = gidx;
-		bins[binindex].binid = binindex;
-	}
-	if(gidx == nptcls-1)
-	{
-		binindex = particles.binid[gidx];
-		bins[binindex].ilastp = gidx;
-		bins[binindex].binid = binindex;
+			if(binindex_right != binindex)
+			{
+				bins[binindex].ilastp = gidx;
+				bins[binindex_right].ifirstp = gidx+1;
+				bins[binindex].binid = binindex;
+			}
+
+		}
+
+
+
+
+		gidx += blockDim.x*gridDim.x;
 	}
 }
 
@@ -173,7 +183,8 @@ void XPlist::sort(Particlebin* bins)
 	int cudaGridSize;
 	int cudaBlockSize = SORT_BLOCK_SIZE;
 
-	cudaGridSize = (nptcls+SORT_BLOCK_SIZE-1)/SORT_BLOCK_SIZE;
+	cudaGridSize = (nptcls+SORT_BLOCK_SIZE*SORT_NPTCLS_PER_THREAD-1)/
+			(SORT_BLOCK_SIZE*SORT_NPTCLS_PER_THREAD);
 
 	//CUDA_SAFE_CALL(cudaMemset(particle_id,0,nptcls*sizeof(int)));
 
@@ -205,6 +216,7 @@ void XPlist::sort(Particlebin* bins)
 	int reorder_pdata = get_timer_int("reorder_particle_list");
 	g_timers[reorder_pdata].start_timer();
 #endif
+
 
 	// Reorder the particle data
 	for(int i=0;i<8;i++)
@@ -314,140 +326,6 @@ void xplist_sort_(long int* XP_ptr,long int* mesh_ptr,int* istep)
 	cutDeleteTimer( timer);
 #endif
 
-}
-
-int transposeblockSize = SORT_BLOCK_SIZE;
-
-
-__global__
-void transpose_gpu_kernel(XPlist device_data, cudaMatrixf host_data, int nptcls,int ndims,int direction)
-{
-	int idx = threadIdx.x;
-	int gidx = blockIdx.x*blockDim.x+idx;
-
-	int ogidx;
-	if(gidx < nptcls)
-	{
-		for(int i=0;i<6;i++)
-		{
-			if(direction == 0)
-			{
-				(*device_data.get_float_ptr(i))[gidx] = host_data(i,gidx);
-
-			}
-			else if(direction == 1)
-			{
-				ogidx = device_data.particle_id[gidx];
-				//ogidx = gidx;
-				if(host_data(i,ogidx) != (*device_data.get_float_ptr(i))[gidx]){
-					//printf("host_data(%i,%i = %i) = %f = %f\n",i,ogidx,gidx,host_data(i,ogidx),(*device_data.get_float_ptr(i))[gidx]);
-				}
-				host_data(i,gidx) = (*device_data.get_float_ptr(i))[gidx];
-			}
-
-		}
-	}
-
-}
-
-
-extern "C" __host__
-void xplist_transpose_(long int* xplist_d,
-									   float* xplist_h,float* dt_prec,float* vzinit,int* ipf,
-									   int* npartmax,int* ndims,int* direction,int* xpdata_only)
-{
-/*
-#ifdef time_run
-	unsigned int timer = 0;
-	cutCreateTimer(&timer);
-	cutStartTimer(timer);
-#endif
-*/
-	XPlist particles = *(XPlist*)(*xplist_d);
-
-	int nptcls = particles.nptcls;
-	//printf("nptcls = %i \n",nptcls);
-	int gridSize = (nptcls+transposeblockSize-1)/transposeblockSize;
-
-	//cudaMatrixf host_data(6,nptcls);
-
-	float* xplist_h_t = (float*)malloc(nptcls*6*sizeof(float));
-	//CUDA_SAFE_CALL(cudaMallocHost((void**)&xplist_h_t,nptcls*6*sizeof(float)));
-
-
-	// Direction == 0 means a transfer to the GPU
-	// Direction == 1 means a transfer to the CPU
-
-	if((*direction == 0)&&(*xpdata_only == 0))
-	{
-		//host_data.cudaMatrixcpy(xplist_h,cudaMemcpyHostToDevice);
-		CUDA_SAFE_CALL(cudaMemcpy(particles.dt_prec,dt_prec,nptcls*sizeof(float),cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(particles.vzinit,vzinit,nptcls*sizeof(float),cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(particles.ipf,ipf,nptcls*sizeof(int),cudaMemcpyHostToDevice));
-	}
-
-	if(*direction == 0)
-	{
-		/*
-		for(int i=0;i<nptcls;i++)
-		{
-			for(int j=0;j<6;j++)
-			{
-				xplist_h_t[i+nptcls*j] = xplist_h[j+i*6];
-			}
-		}
-		*/
-		MKL_Somatcopy('C','T',6,nptcls,1.0f,xplist_h,6,xplist_h_t,nptcls);
-
-		for(int i=0;i<6;i++)
-		{
-			CUDA_SAFE_CALL(cudaMemcpy(*(particles.get_float_ptr(i)),xplist_h_t+nptcls*i,nptcls*sizeof(float),cudaMemcpyHostToDevice));
-		}
-	}
-	else
-	{
-		for(int i=0;i<6;i++)
-		{
-			CUDA_SAFE_CALL(cudaMemcpy(xplist_h_t+nptcls*i,*(particles.get_float_ptr(i)),nptcls*sizeof(float),cudaMemcpyDeviceToHost));
-		}
-
-		/*
-		for(int i=0;i<nptcls;i++)
-		{
-			for(int j=0;j<6;j++)
-			{
-				xplist_h[i*6+j] = xplist_h_t[i+nptcls*j];;
-			}
-		}
-		*/
-		MKL_Somatcopy('C','T',nptcls,6,1.0,xplist_h_t,nptcls,xplist_h,6);
-	}
-
-
-
-
-	//CUDA_SAFE_KERNEL((transpose_gpu_kernel<<<gridSize,transposeblockSize>>>
-					//			 (particles,host_data,nptcls,ndims[0],direction[0])));
-
-	if((*direction == 1)&&(*xpdata_only == 0))
-	{
-		//host_data.cudaMatrixcpy(xplist_h,cudaMemcpyDeviceToHost);
-		CUDA_SAFE_CALL(cudaMemcpy(dt_prec,particles.dt_prec,nptcls*sizeof(float),cudaMemcpyDeviceToHost));
-		CUDA_SAFE_CALL(cudaMemcpy(vzinit,particles.vzinit,nptcls*sizeof(float),cudaMemcpyDeviceToHost));
-		CUDA_SAFE_CALL(cudaMemcpy(ipf,particles.ipf,nptcls*sizeof(int),cudaMemcpyDeviceToHost));
-	}
-
-//	host_data.cudaMatrixFree();
-
-	//CUDA_SAFE_CALL(cudaFreeHost(xplist_h_t));
-	free(xplist_h_t);
-/*
-#ifdef time_run
-	printf( "Particle List transpose took: %f (ms)\n\n", cutGetTimerValue( timer));
-	cutStopTimer(timer);
-	cutDeleteTimer( timer);
-#endif
-*/
 }
 
 
@@ -579,8 +457,8 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out,in
 
 
 			write_to_nodes(my_data_out,1.0f,cellfractions,ncells);
-
-			/*
+/*
+			int3 lcell;
 			lcell.x = my_cell.x-1;
 			lcell.y = my_cell.y-1;
 			lcell.z = my_cell.z-1;
@@ -588,25 +466,25 @@ void chargetomesh_kernel(XPlist particles,Mesh_data mesh,cudaMatrixf data_out,in
 			lcell.y -= (int)(binindex.y);
 			lcell.z -= (int)(binindex.z);
 
-			if(((lcell.x) < 8)&&((lcell.y) < 8)&&((lcell.z) < 8)&&
+			if(((lcell.x) < ncells.x)&&((lcell.y) < ncells.y)&&((lcell.z) < ncells.z)&&
 				((lcell.x) >= 0)&&((lcell.y) >= 0)&&((lcell.z) >= 0)&&
 				(cellfractions.x >= 0.0f)&&(cellfractions.y >= 0.0f)&&
 				(cellfractions.z >= 0.0f)&&
 				(cellfractions.x <= 1.0f)&&(cellfractions.y <= 1.0f)&&
 				(cellfractions.z <= 1.0f))
 			{
-				write_to_nodes(my_data_out,1.0f,cellfractions);
+				write_to_nodes(my_data_out,1.0f,cellfractions,ncells);
 			}
 			else
 			{
 				printf("Error particle %i in cell (%i, %i, %i) at position %f, %f, %f with cellf %f, %f, %f\n",gidx,my_cell.x,
 							my_cell.y,my_cell.z,particles.px[gidx],particles.py[gidx],particles.pz[gidx],cellfractions.x,cellfractions.y,cellfractions.z);
 			}
-			*/
+*/
 		}
 
 		block_start += CHARGE_ASSIGN_BLOCK_SIZE;
-		__syncthreads();
+//		__syncthreads();
 
 	}
 
@@ -658,7 +536,7 @@ extern "C" void gpu_chargeassign_(long int* XP_ptr,long int* mesh_ptr,float* psu
 	//CUDA_SAFE_CALL(cudaMemset(bin_census_ptr,0,sizeof(int)));
 
 	mesh_d.psum.cudaMatrixSet(0);
-	cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+	CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
 #ifdef PROFILE_TIMERS
 	int c2mesh_timer = get_timer_int("chargetomesh_kernel");
 	g_timers[c2mesh_timer].start_timer();
@@ -742,12 +620,6 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 				}
 				else
 				{
-					if(didileave == 2)
-					{
-						vtemp.x = particles.vx[gidx];
-						vtemp.y = particles.vy[gidx];
-						vtemp.z = particles.vz[gidx];
-					}
 					atomicAdd(&momout.x,-vtemp.x);
 					atomicAdd(&momout.y,-vtemp.y);
 					atomicAdd(&momout.z,-vtemp.z);
@@ -806,12 +678,20 @@ void scan_condense(T* data_out,T* data_in,int* scan_data,int* condition,int n_el
 	int idx = threadIdx.x;
 	int gidx = blockIdx.x*blockDim.x+idx;
 
+
+
 	while(gidx < n_elements)
 	{
-		if(condition[gidx])
+		int oidxm = 0;
+		int oidx = scan_data[gidx];
+
+		if(gidx > 0)
+			oidxm = scan_data[gidx-1];
+
+		if(oidx != oidxm)
 		{
-			int oidx = scan_data[gidx] - 1;
-			data_out[oidx] = data_in[gidx];
+
+			data_out[oidx-1] = data_in[gidx];
 		}
 		gidx += blockDim.x*gridDim.x;
 	}
@@ -847,7 +727,7 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 
 	// Need to allocate space for the scan
 	int* didileave_scan;
-	CUDA_SAFE_CALL(cudaMalloc((void**)&didileave_scan,nptcls*sizeof(int)));
+	//CUDA_SAFE_CALL(cudaMalloc((void**)&didileave_scan,nptcls*sizeof(int)));
 	CUDA_SAFE_CALL(cudaMemset(didileave,0,nptcls*sizeof(int)));
 
 
@@ -864,16 +744,16 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 	g_timers[my_timer].stop_timer();
 #endif
 	// Copy the didileave array so that we can do a scan without messing up our earlier results
-	CUDA_SAFE_CALL(cudaMemcpy(didileave_scan,didileave,nptcls*sizeof(int),cudaMemcpyDeviceToDevice));
+	//CUDA_SAFE_CALL(cudaMemcpy(didileave_scan,didileave,nptcls*sizeof(int),cudaMemcpyDeviceToDevice));
 
 	// Copy the diags to the host
 
 	// Figure out how many particles left the grid with a scan
-	thrust::device_ptr<int> thrust_scan(didileave_scan);
+	thrust::device_ptr<int> thrust_scan(didileave);
 	cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
 	thrust::inclusive_scan(thrust_scan,thrust_scan+nptcls,thrust_scan);
 
-	CUDA_SAFE_CALL(cudaMemcpy(&nptcls_left,didileave_scan+nptcls-1,sizeof(int),cudaMemcpyDeviceToHost));
+	CUDA_SAFE_CALL(cudaMemcpy(&nptcls_left,didileave+nptcls-1,sizeof(int),cudaMemcpyDeviceToHost));
 
 	//printf("%i particles have left the domain\n",nptcls_left);
 
@@ -882,9 +762,9 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 		XPlist new_particles;
 
 		new_particles.allocate(nptcls_left);
-		float* dt_prec_dum;
-		float* vzinit_dum;
-		int* ipf_dum;
+		float* dt_prec_dum = 0;
+		float* vzinit_dum = 0;
+		int* ipf_dum = 0;
 		int* parent_id;
 		int ndims = 6;
 		int direction = 0;
@@ -902,11 +782,11 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 		reinject_counter += nptcls_left;
 		cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
 		// Copy dt_prec's of the particles that exited the grid
-		CUDA_SAFE_KERNEL((scan_condense<<<cudaGridSize,cudaBlockSize>>>
-									 (new_particles.dt_prec,dt_prec,didileave_scan,didileave,nptcls)));
+		((scan_condense<<<cudaGridSize,cudaBlockSize>>>
+									 (new_particles.dt_prec,dt_prec,didileave,didileave,nptcls)));
 		// Copy parent_id's of the new particles
 		CUDA_SAFE_KERNEL((scan_condense<<<cudaGridSize,cudaBlockSize>>>
-									 (parent_id,particle_id,didileave_scan,didileave,nptcls)));
+									 (parent_id,particle_id,didileave,didileave,nptcls)));
 
 		// Advance the reinjected particles
 		new_particles.advance(mesh,diags,reinjlist_h,0.5*dt,reinject_counter);
@@ -945,7 +825,7 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 	}
 
 	cudaDeviceSynchronize();
-	CUDA_SAFE_CALL(cudaFree(didileave_scan));
+	//CUDA_SAFE_CALL(cudaFree(didileave_scan));
 	//printf("Finished GPU PADVNC\n");
 
 }

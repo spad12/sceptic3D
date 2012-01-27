@@ -34,7 +34,7 @@ c     Variables used for calculating matrix A for debugging
       integer n1,n2,n3,m,n,o
 
       integer*8 GPUXPlist,GPUMesh
-      real tweight
+      real tweight,reinjfrac
 
 
 c Parallel processing MPI options.
@@ -140,6 +140,7 @@ c Signal that fvcom is not initialized. After initialization it is .ne.0
 
 c Set the minimum bin dimension for gpu run
 			minbins=8
+			runid=0
 
       
 
@@ -282,6 +283,9 @@ c        For debugging, give option to save A and/or phi
          if(string(1:10) .eq. '--gpurun') gpurun=.true.
          if(string(1:9) .eq. '--minbins')then
          	  read(string(10:),*)minbins
+         endif
+         if(string(1:7) .eq. '--runid')then
+         	  read(string(8:),*)runid
          endif
         
  1    continue
@@ -511,6 +515,8 @@ c     Timing
 c Initialize GPU arrays
 				call initialize_gpu(GPUXPlist,GPUMesh,myid2)
 			endif
+
+
 #ifdef MPI
       	call MPI_BARRIER(MPI_COMM_WORLD,ierr)
 #endif
@@ -519,7 +525,23 @@ c Initialize GPU arrays
 
       call inittimes()
 
+
+      ilastgen = 1
+      icurrreinject = npart/50
+
+			call start_timer(timer2)
+      call orbitreinjectgen(xpreinject,npreinject,icurrreinject,
+     $         ilastgen,dtin)
+
+      if(step.eq.1)then
+         ilastgen = 1
+         icurrreinject = 1
+      endif
+
+
       call start_timer(t2)
+
+
 c Main Stepping loop.
       do i=1,maxsteps
          
@@ -683,6 +705,7 @@ c     SCEPTIC2D uses the potential at the current time step.
             write(*,'(i5,$)')i
          endif
 
+
 c        For debugging: Save Poisson matrices if flag set and small grid
          stepcount = stepcount+1
          if (lsavemat .and.
@@ -827,9 +850,10 @@ c     Main particle advance, including collisions.
          call padvnc(GPUXPlist,GPUMesh,
      $ 			dt,icolntype,colnwt,i,maccel,ierad)
 
-
+			call start_timer(t8)
 c     Reduce back the flux and distribution data from the particle advance.
          call partreduce(i)
+
 
 
 c     Adjust to the flux and momenta that would have occurred for
@@ -843,6 +867,7 @@ c     standard step size.
             ymom(i,partz,1)=ymom(i,partz,1)/dt
             ymom(i,partz,2)=ymom(i,partz,2)/dt
             enertot(i)=enertot(i)/dt
+            reinjfrac = reinjfrac+float(nrein)/float(nparttotal)
 
 c For debugging, don't do this since clutters output
 cc Small mesh written diagnostics.
@@ -854,13 +879,14 @@ c               write(*,504)(((phi(iw,jw,kw),iw=1,nr),jw=0,NTHFULL),
 c     $              kw=1,NPSIFULL)
 c            endif
          endif
+			call stop_timer(preducet,t8)
 
          time=time+dt
  503     format(10f8.1)
  504     format(10f8.3) 
 
-      	call start_timer(t7)
- 				call stop_timer(offtime,t7)
+c      	call start_timer(t7)
+c 				call stop_timer(offtime,t7)
       enddo
 #ifdef MPI
 			call MPI_BARRIER(MPI_COMM_WORLD,ierr)
@@ -868,35 +894,10 @@ c            endif
 
       call stop_timer(totalt,t2)
 
-			tweight=(1.0*npart)/(1.0*nparttotal)
-			tweight = 1.0
-			call adjtimes(padvncttot,padvnct,tweight)
-			call adjtimes(reinjectttot,reinjectt,tweight)
-			call adjtimes(c2meshttot,c2mesht,tweight)
-			call adjtimes(chassttot,chasst,tweight)
-			call adjtimes(sortttot,sortt,tweight)
-			call adjtimes(fcalcttot,fcalct,tweight)
-			call adjtimes(cg3dttot,cg3dt,tweight)
-			call adjtimes(sumreducettot,sumreducet,tweight)
-			call adjtimes(rhocalcttot,rhocalct,tweight)
-			call adjtimes(totalttot,totalt,1.0)
 
-      if(myid.eq.0) then
-				write(*,*)
-				write(*,*)'Average Subroutine Run Times(ns) ',
-     $				 'per particle per timestep'
-      	write(*,*) "Average Padvnc Time : ",padvncttot
-      	write(*,*) "Average Reinject Time : ",reinjectttot
-      	write(*,*) "Average Chargetomesh Time : ",c2meshttot
-      	write(*,*) "Average Sort Time : ",sortttot
-      	write(*,*) "Average Chargeassign Time : ",chassttot
-      	write(*,*) "Average fcalc Time : ",fcalcttot
-      	write(*,*) "Average cg3d Time : ",cg3dttot
-      	write(*,*) "Average sumreduce Time : ",sumreducettot
-      	write(*,*) "Average rhocalc Time : ",rhocalcttot
-      	write(*,*) "Average Total Time : ",totalttot
-      endif
 c End of particle stepping section.
+c  		reinjfrac = reinjfrac/float(maxsteps)
+			call output_times(reinjfrac,dt)
 			if(myid.eq.0) call get_times(t1)
 
 

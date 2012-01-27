@@ -10,30 +10,58 @@ VERSION := 0.9
 NUMPROC := 8
 
 # Set compilers
-G77 := mpiifort
-G77nonmpi := ifort
-G90 := mpiifort
-G90nonmpi := ifort
-
-CC :=icc
-CPP :=icpc
-
-
 NVCC		:= /usr/local/cuda/bin/nvcc
-MKLROOT := /opt/intel/Compiler/11.1/073/mkl
-MKL_LAPACK := -L$(MKLROOT)/lib/em64t -lmkl_solver_lp64_sequential -Wl,--start-group  -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread
-CUDA_INCLUDE_PATH	:= -I./cutil -I/opt/intel/Compiler/11.1/073/include -I/opt/intel/Compiler/11.1/073/mkl/include
-CUDAFORTRAN_FLAGS := -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -L./cutil -lcutil_x86_64 $(MKL_LAPACK) -I$(CUDA_INCLUDE_PATH)
-PGPLOT_FLAGS := -L/usr/local/pgplot -lcpgplot -lpgplot -lX11 -lgcc -lm
-PGPLOT_DIR = /usr/local/pgplot/
-NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -ftz=true -prec-div=false -prec-sqrt=false  -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin $(CC) -Xcompiler -fast $(CUDA_INCLUDE_PATH) 
+INTEL_LIBS :=
+CUDAFORTRAN_FLAGS :=
+
+ifndef CC
+	CC := gcc
+endif
+
+ifeq ($(CC),icc)
+	G77 := mpiifort
+	G77nonmpi := ifort
+	G90 := mpiifort
+	G90nonmpi := ifort
+	CC :=icc
+	CPP :=icpc
+	
+	FLIBROOT := /opt/intel/Compiler/11.1/073
+	INTEL_LIBS = -L$(FLIBROOT)/lib/intel64 -lifcore -lifport
+	MKLROOT := /opt/intel/Compiler/11.1/073/mkl
+	# Use MKL_LAPACK if it is defined
+	ifdef MKLROOT
+		MKL_LAPACK := -L$(MKLROOT)/lib/em64t -lmkl_solver_lp64_sequential -Wl,--start-group  -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread
+		MKL_LAPACK += -I/opt/intel/Compiler/11.1/073/include -I/opt/intel/Compiler/11.1/073/mkl/include
+		NVCC +=  -Xcompiler -DINTEL_MKL -Xcompiler -fast
+		CUDAFORTRAN_FLAGS += $(MKL_LAPACK)
+	endif
+	
+else
+	CC = gcc
+	G77 := $(shell ./setcomp f77)
+	G77nonmpi := $(shell ./setcomp f77 nonmpi)
+	G90 := $(shell ./setcomp f90)
+	G90nonmpi := $(shell ./setcomp f90 nonmpi)
+	G77 += -fc=gfortran
+	G90 += -fc=gfortran
+	CUDAFORTRAN_FLAGS += -lstdc++
+endif
+	
+CUDA_INCLUDE_PATH	:= -I./cutil 
+CUDAFORTRAN_FLAGS += -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcuda -L./cutil -lcutil_x86_64 $(CUDA_INCLUDE_PATH) 
+
+
+
+
+NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -ftz=true -prec-div=false -prec-sqrt=false  -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin $(CC) $(CUDA_INCLUDE_PATH) 
 #NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3  -Xptxas -maxrregcount=40 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc -Xcompiler -fast $(CUDA_INCLUDE_PATH) 
 
 NVCC +=  $(NVCCFLAGS) #-L/home/josh/lib -lcutil_x86_64
 
 
-FLIBROOT := /opt/intel/Compiler/11.1/073
-INTEL_LIBS := -L$(FLIBROOT)/lib/intel64 -lifcore -lifport
+
+	
 # HDF root directory
 #HDFDIR := $(realpath hdf5-1.8.4)
 # realpath not available on loki, so use hack
@@ -61,13 +89,17 @@ LIBHDF += -L$(DIRHDF)/lib -lhdf5hl_fortran -lhdf5_hl \
 # Note that the -Wl,-rpath... options are needed since LD_LIBRARY_PATH
 #   does not contain the location of the hdf shared libraries at runtime 
 
-
+OPTCOMP := -I.
 # Options to pass to compiler
-OPTCOMP := -I. -I/opt/intel/Compiler/11.1/073/include -fPIC -assume no2underscores -fp-model precise
+ifeq ($(CC),icc)
+OPTCOMP += -I. -I/opt/intel/Compiler/11.1/073/include -fPIC -assume no2underscores -fp-model precise
+# Enable optimization
+OPTCOMP += -xHOST -O3 -no-prec-div -xSSE4.2
+endif
 # Show all warnings exept unused variables
 #OPTCOMP += -Wall -Wno-unused-variable
 # Enable optimization
-OPTCOMP += -xHOST -O3 -no-prec-div -xSSE4.2
+OPTCOMP +=  -O3
 # Save debugging info
 #OPTCOMP += -g -pg
 # Do bounds check (debugging)
@@ -100,6 +132,7 @@ OBJ := initiate.o \
        gpu_init.o \
        initialize_gpu.o \
        XPlist_host_functions.o \
+       XPlist_transpose.o \
        chargefield_gpu.o \
        randc.o \
        randf.o \
@@ -110,6 +143,7 @@ OBJ := initiate.o \
        rhoinfcalc.o \
        shielding3D.o \
        timing.f \
+       gpu_timing.o \
        cg3D_gpu.o \
        gpu_psolve_tests.o \
        stupid_sort.o
@@ -169,7 +203,7 @@ $(DIRHDF)/lib/libhdf5.a :
 
 # Other rules
 ./accis/libaccisX.a : ./accis/*.f
-	make -C accis
+	make -C accis CC=$(CC)
 
 orbitint : orbitint.f coulflux.o $(OBJ) ./accis/libaccisX.a
 	$(G77) $(OPTCOMP) -o orbitint orbitint.f $(OBJ) coulflux.o $(LIB)

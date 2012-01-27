@@ -122,7 +122,7 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi,int* minbins_in)
 	maxdim = MAX_SMEM_PER_C2MESH/(n_cells_psi*n_cells_th);
 	n_cells_r = fixdim(*nr,maxdim,minbins);
 
-//	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
+	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
 
 	ncells_per_bin_g.x = n_cells_r;
 	ncells_per_bin_g.y = n_cells_th;
@@ -338,8 +338,6 @@ extern "C" void gpu_particle_list_init_(long int* particles_out,int* nptcls)
 	// See how much memory is allocated / free
 	cudaMemGetInfo(&free,&total);
 	printf("Free Memory = %i mb\nUsed mememory = %i mb\n",(int)(free)/(1<<20),(int)(total-free)/(1<<20));
-
-	printf("Setting up Mesh Arrays\n");
 
 }
 

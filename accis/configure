@@ -29,8 +29,6 @@ else
 fi
 fi
 
-COMPILER=ifort
-
 
 # Xlib choice.
 if [ "`uname -m`" == "x86_64" ] ; then 

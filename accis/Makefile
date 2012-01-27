@@ -3,8 +3,15 @@
 # These defaults generally set in ./configure, but we allow null configure.
 #Default compiler
 ifeq ("$(F77)","")
-    F77=ifort
+    F77=gfortran
 endif
+
+ifeq ($(CC),icc)
+	F77=ifort
+else
+	F77=gfortran
+endif
+
 #Default xlib path (32 bit).
 ifeq ("$(XLIB)","")
     XLIB=/usr/X11R6/lib/

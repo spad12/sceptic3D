@@ -242,7 +242,7 @@ c Data necessary for the orbit tracking
       integer npreinject
       integer icurrreinject
       integer ilastgen
-      parameter(npreinject=npartmax/10)
+      parameter(npreinject=npartmax/50)
       real xpreinject(ndim,npreinject)
       common /reinjectcom/icurrreinject,xpreinject,ilastgen
 
@@ -255,6 +255,8 @@ c Data necessary for the orbit tracking
       real fcalct,fcalcttot,rhocalct,rhocalcttot
       real sumreducet,sumreducettot,offtime
       real cg3dt,cg3dttot
+      real preducet,preducettot
+      integer runid
       common /timings/padvnct,padvncttot,
      $			c2mesht,c2meshttot,totalt,
      $			totalttot,fcalct,fcalcttot,rhocalct,
@@ -262,7 +264,8 @@ c Data necessary for the orbit tracking
      $			sumreducettot,offtime,
      $			cg3dt,cg3dttot,chasst,
      $			chassttot,sortt,sortttot,
-     $			reinjectt,reinjectttot
+     $			reinjectt,reinjectttot,
+     $			preducet,preducettot,runid
 
 c*********************************************************************
 c GPU object pointers

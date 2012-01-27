@@ -19,18 +19,12 @@ c Common data:
 
 
 
-      if(step.eq.1)then
-         ilastgen = 1
-         icurrreinject = npreinject
-      endif
+
 			call start_timer(timer2)
       call orbitreinjectgen(xpreinject,npreinject,icurrreinject,
      $         ilastgen,dtin)
+
 			call stop_timer(reinjectt,timer2)
-      if(step.eq.1)then
-         ilastgen = 1
-         icurrreinject = 1
-      endif
 
       !call test_gpu_getaccel(GPUXPlist,GPUMesh,phi)
 
