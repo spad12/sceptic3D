@@ -1,5 +1,4 @@
 #include "XPlist.cuh"
-#include "mkl_trans.h"
 
 #include "gpu_timing.cuh"
 //__constant__ int ncells_per_binr_d;
