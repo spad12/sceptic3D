@@ -3,6 +3,8 @@
  *
  *  Created on: Aug 4, 2010
  *      Author: paynej
+ *
+ *    This software contains source code provided by NVIDIA Corporation.
  */
 
 #ifndef __CUDAMATRIX_TYPES_INCLUDED__

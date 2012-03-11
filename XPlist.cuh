@@ -255,6 +255,8 @@ public:
 __inline__ __device__
 int zorder(int ix,int iy,int iz)
 {
+	// Spread the bits of each index
+	// so that there are 2 empty bits between each bit
 	ix = (ix | (ix << 16)) & 0x030000FF;
 	ix = (ix | (ix <<  8)) & 0x0300F00F;
 	ix = (ix | (ix <<  4)) & 0x030C30C3;
@@ -429,11 +431,13 @@ void XPlist::move(Mesh_data* mesh,float3 &pout,float3 &vout,float dtin,int gidx)
 __inline__ __device__
 uint condense_bits(uint in)
 {
+	// Removes 2 of every 3 bits.
 	in = ((in & 0x08208208) >> 2) ^ (in & ~(0x08208208));
 	in = ((in & 0x400C00C0) >> 4) ^ (in &  ~(0x400C00C0));
 	in = ((in & 0x0000F000) >> 8) ^ (in &  ~(0x0000F000));
 	in = ((in & 0x07000000) >> 16) ^ (in &  ~(0x07000000));
 
+	// Return only 1 bit for every 3 bits in 'in'
 	return in;
 
 }
@@ -679,9 +683,9 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 		{
 			//printf("particle left the grid with position %f, %f, %f\n",px2,py2,pz2);
 			// Particle intersects the probe before it finishes its step;
-			px2 = px1 + d*dx;
-			py2 = py1 + d*dy;
-			pz2 = pz1 + d*dz;
+			px2 = px1 + d*dx*dl;
+			py2 = py1 + d*dy*dl;
+			pz2 = pz1 + d*dz*dl;
 			result = 1;
 
 			return result;
@@ -702,9 +706,9 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 
 		//printf("particle left the grid with position %f, %f, %f\n",px2,py2,pz2);
 
-		px2 = px1 + d*dx;
-		py2 = py1 + d*dy;
-		pz2 = pz1 + d*dz;
+		px2 = px1 + d*dx*dl;
+		py2 = py1 + d*dy*dl;
+		pz2 = pz1 + d*dz*dl;
 		return result;
 
 	}

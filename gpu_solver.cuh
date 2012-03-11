@@ -1,3 +1,6 @@
+/*
+ * This software contains source code provided by NVIDIA Corporation.
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
@@ -13,6 +16,9 @@
 #include <thrust/scan.h>
 #include "cudamatrix_types.cuh"
 
+#include "cuda_texture_types.h"
+#include "texture_fetch_functions.h"
+
 #  define CUDA_SAFE_KERNEL(call) {                                         \
 	call;																					\
 	cudaDeviceSynchronize();														\
@@ -24,7 +30,7 @@
     } }
 
 
-
+//#define Texture_Solver
 
 #define ATIMES_BLOCK_SIZE 256
 
@@ -39,6 +45,58 @@ extern "C" void start_timer_(uint* timer);
 
 extern "C" void stop_timer_(float* time,uint* timer);
 
+typedef float (*texFunctionPtr)(float,float);
+
+class texMatrix
+{
+public:
+
+	__host__ __device__
+	texMatrix(){;}
+
+	__host__
+	void allocate(int nx_in, int ny_in, const char* texture_name_in);
+
+	__host__
+	void setup(float* src);
+
+
+	__device__
+	float operator()(int ix,int iy)
+	{
+		return fetchFunction(ix,iy);
+	}
+
+	__device__
+	float operator()(int ix)
+	{
+		return fetchFunction(ix,0);
+	}
+
+	__host__
+	void texMatrixFree(void)
+	{
+		const textureReference* texRefPtr;
+		char* texrefstring = (char*)malloc(sizeof(char)*30);
+
+		sprintf(texrefstring,"%s_t",texture_name);
+
+		// Get the texture reference
+		CUDA_SAFE_CALL(cudaGetTextureReference(&texRefPtr, texrefstring));
+		CUDA_SAFE_CALL(cudaUnbindTexture(texRefPtr));
+
+		cudaFree(cuArray);
+	}
+
+private:
+	int nx,ny;
+	texFunctionPtr fetchFunction;
+	cudaArray* cuArray;
+	const char* texture_name;
+
+
+};
+
 
 class PoissonSolver
 {
@@ -47,7 +105,12 @@ public:
 	int n1,n2,n3;
 	int t_iter;
 
-	cudaMatrixf apc,bpc,cpc,dpc,epc,fpc,gpc;
+#ifdef Texture_Solver
+	texMatrix apc,bpc,cpc,dpc,epc,fpc;
+#else
+	cudaMatrixf apc,bpc,cpc,dpc,epc,fpc;
+#endif
+	cudaMatrixf gpc;
 	cudaMatrixf x;
 	cudaMatrixf b;
 	cudaMatrixf p,z,pp,zz,res,resr;

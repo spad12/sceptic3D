@@ -1,3 +1,7 @@
+/*
+ * "This software contains source code provided by NVIDIA Corporation."
+ */
+
 #include "XPlist.cuh"
 
 #ifdef INTEL_MKL

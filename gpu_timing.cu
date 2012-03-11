@@ -1,3 +1,7 @@
+/*
+ * "This software contains source code provided by NVIDIA Corporation."
+ */
+
 #include "gpu_timing.cuh"
 #include "XPlist.cuh"
 #include <fstream>

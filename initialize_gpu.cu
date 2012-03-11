@@ -1,5 +1,6 @@
-
-
+/*
+ * "This software contains source code provided by NVIDIA Corporation."
+ */
 #include "XPlist.cuh"
 
 
@@ -75,13 +76,15 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi,int* minbins_in)
 
 
 
-	int minbins = max(2,*minbins_in); // must be set here
+	uint minbins = max(2,(*minbins_in)); // must be set here
 
 	// check to make sure minbins is a power of 2
 	while(!((minbins != 0) && ((minbins & (~minbins + 1)) == minbins)))
 	{
 		minbins++;
 	}
+
+//	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i minbins = %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi,minbins);
 
 	int maxdim = floor(pow(((double)MAX_SMEM_PER_C2MESH),(1.0/3.0)));
 
@@ -107,14 +110,14 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi,int* minbins_in)
 	n_cells_psi = fixdim(*npsi,maxdim,minbins);
 	n_cells_th = fixdim(*nth,maxdim,minbins);
 
-	maxdim = MAX_SMEM_PER_C2MESH/(n_cells_psi*n_cells_th);
+//	maxdim = MAX_SMEM_PER_C2MESH/(n_cells_psi*n_cells_th);
 
 	n_cells_r = fixdim(*nr,maxdim,minbins);
 
 	// Now make sure that all the dimensions have the same number of bins
 	minbins = max((*nr/n_cells_r),max((*nth/n_cells_th),(*npsi/n_cells_psi)));
 //	printf("dims = %i, %i, %i\nncells_per_bin = %i, %i, %i\n",*nr,*nth,*npsi,n_cells_r,n_cells_th,n_cells_psi);
-	maxdim = sqrt(n_cells_psi*n_cells_th);
+//	maxdim = sqrt(n_cells_psi*n_cells_th);
 
 	n_cells_psi = fixdim(*npsi,maxdim,minbins);
 	n_cells_th = fixdim(*nth,maxdim,minbins);
@@ -127,6 +130,8 @@ extern "C" void fix_grid_dimensions_(int* nr,int* nth,int* npsi,int* minbins_in)
 	ncells_per_bin_g.x = n_cells_r;
 	ncells_per_bin_g.y = n_cells_th;
 	ncells_per_bin_g.z = n_cells_psi;
+
+	*minbins_in = minbins;
 
 
 
