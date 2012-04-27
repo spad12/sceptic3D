@@ -265,7 +265,15 @@ extern "C" void gpu_mesh_init_(long int* Mesh_ptr,
 	 */
 
 	// Allocate gpu memory
+#ifdef TEXTURE_PHI
+	cudaExtent extent;
+	extent = make_cudaExtent(nr,nth,npsi);
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+
+	CUDA_SAFE_CALL(cudaMalloc3DArray(&Mesh_d.phi,&desc,extent));
+#else
 	Mesh_d.phi.cudaMatrix_allocate(nr,nth,npsi);
+#endif
 //	Mesh_d.phiaxis.cudaMatrix_allocate(nr,2,npsi);
 //	Mesh_d.rho.cudaMatrix_allocate(nr,nth,npsi);
 //	Mesh_d.rhoDiag.cudaMatrix_allocate(nr,nth,npsi);
@@ -298,6 +306,8 @@ extern "C" void gpu_mesh_init_(long int* Mesh_ptr,
 	Mesh_d.nbins = nbinsr*nbinsth*nbinspsi;
 	CUDA_SAFE_CALL(cudaMalloc((void**)&(Mesh_d.bins),(Mesh_d.nbins)*sizeof(Particlebin)));
 
+
+
 	// Copy Mesh data to the GPU
 	Mesh_d.rmesh.cudaMatrixcpy(rmesh,cudaMemcpyHostToDevice);
 	Mesh_d.rccmesh.cudaMatrixcpy(rccmesh,cudaMemcpyHostToDevice);
@@ -315,7 +325,9 @@ extern "C" void gpu_mesh_init_(long int* Mesh_ptr,
 //	Mesh_d.Gcom.cudaMatrixcpy(Gcom,cudaMemcpyHostToDevice);
 //	Mesh_d.Vcom.cudaMatrixcpy(Vcom,cudaMemcpyHostToDevice);
 
-
+	Mesh_d.rmesh_h2 = rmesh;
+	Mesh_d.thetamesh_h2 = thmesh;
+	Mesh_d.psimesh_h2 = pcc;
 
 
 	// Store the pointer to the mesh data and wrap it as an int

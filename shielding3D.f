@@ -403,8 +403,8 @@ c **************************************
       integer n1,n2,n3
 
       if (test_atimes.le.test_atimesm) then
-				call asolve_test(GPUPsolve,phi,b,z,
-     $			gpc,n1,n2,n3)
+c				call asolve_test(GPUPsolve,phi,b,z,
+c     $			gpc,n1,n2,n3)
 			 test_atimes = test_atimes + 1
 			endif
 
@@ -426,8 +426,8 @@ c **************************************
 
       if (test_atimes.le.test_atimesm) then
       	temp = .false.
-				call atimes_test(GPUPsolve,phi,x,res,
-     $			gpc,n1,n2,n3,temp)
+c				call atimes_test(GPUPsolve,phi,x,res,
+c     $			gpc,n1,n2,n3,temp)
 			 test_atimes = test_atimes + 1
 			else
 

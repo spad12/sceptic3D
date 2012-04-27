@@ -81,7 +81,7 @@ void xplist_transpose_(long int* xplist_d,
 		//host_data.cudaMatrixcpy(xplist_h,cudaMemcpyHostToDevice);
 		CUDA_SAFE_CALL(cudaMemcpy(particles.dt_prec,dt_prec,nptcls*sizeof(float),cudaMemcpyHostToDevice));
 		CUDA_SAFE_CALL(cudaMemcpy(particles.vzinit,vzinit,nptcls*sizeof(float),cudaMemcpyHostToDevice));
-		CUDA_SAFE_CALL(cudaMemcpy(particles.ipf,ipf,nptcls*sizeof(int),cudaMemcpyHostToDevice));
+		//CUDA_SAFE_CALL(cudaMemcpy(particles.ipf,ipf,nptcls*sizeof(int),cudaMemcpyHostToDevice));
 	}
 
 	if(*direction == 0)
@@ -138,7 +138,7 @@ void xplist_transpose_(long int* xplist_d,
 		//host_data.cudaMatrixcpy(xplist_h,cudaMemcpyDeviceToHost);
 		CUDA_SAFE_CALL(cudaMemcpy(dt_prec,particles.dt_prec,nptcls*sizeof(float),cudaMemcpyDeviceToHost));
 		CUDA_SAFE_CALL(cudaMemcpy(vzinit,particles.vzinit,nptcls*sizeof(float),cudaMemcpyDeviceToHost));
-		CUDA_SAFE_CALL(cudaMemcpy(ipf,particles.ipf,nptcls*sizeof(int),cudaMemcpyDeviceToHost));
+		//CUDA_SAFE_CALL(cudaMemcpy(ipf,particles.ipf,nptcls*sizeof(int),cudaMemcpyDeviceToHost));
 	}
 
 	icall_transpose++;

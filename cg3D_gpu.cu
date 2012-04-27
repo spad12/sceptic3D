@@ -15,6 +15,106 @@
 
 #define ATIMES_DOMAIN_DIM 13
 
+#ifdef TEXTURE_PHI
+texture<float,cudaTextureType3D,cudaReadModeElementType> phi_t;
+#endif
+
+#ifdef Texture_Solver
+	__inline__ __device__
+	float PoissonSolver::fapc(int gidx)
+	const
+	{
+		return tex1D(apc_t,gidx);
+	}
+	__inline__ __device__
+	float PoissonSolver::fbpc(int gidx)
+	const
+	{
+		return tex1D(bpc_t,gidx);
+	}
+	__inline__ __device__
+	float PoissonSolver::fcpc(int gidx,int gidy)
+	const
+	{
+		return tex2D(cpc_t,gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::fdpc(int gidx,int gidy)
+	const
+	{
+		return tex2D(dpc_t,gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::fepc(int gidx,int gidy)
+	const
+	{
+		return tex2D(epc_t,gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::ffpc(int gidx,int gidy)
+	const
+	{
+		return tex2D(fpc_t,gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::fgpc(int gidy,int gidz,int ij)
+	const
+	{
+		return tex2DLayered(gpc_t,gidy,gidz,ij);
+	}
+	__inline__ __device__
+	float PoissonSolver::fexpphi(const int& gidx,const int& gidy,const int&gidz)
+	const
+	{
+		return exp(tex3D(phi_t,gidx,gidy,gidz));
+	}
+#else
+	__inline__ __device__
+	float PoissonSolver::fapc(int gidx)
+	{
+		return apc(gidx);
+	}
+	__inline__ __device__
+	float PoissonSolver::fbpc(int gidx)
+	{
+		return bpc(gidx);
+	}
+	__inline__ __device__
+	float PoissonSolver::fcpc(int gidx,int gidy)
+	{
+		return cpc(gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::fdpc(int gidx,int gidy)
+	{
+		return dpc(gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::fepc(int gidx,int gidy)
+	{
+		return epc(gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::ffpc(int gidx,int gidy)
+	{
+		return fpc(gidx,gidy);
+	}
+	__inline__ __device__
+	float PoissonSolver::fgpc(int gidy,int gidz,int ij)
+	{
+		return gpc(gidy,gidz,ij);
+	}
+
+	__inline__ __device__
+	float PoissonSolver::fexpphi(const int& gidx,const int& gidy,const int&gidz)
+	const
+	{
+		return (phi(gidx,gidy,gidz));
+	}
+
+
+#endif
+
 template<typename T>
 class sMatrixT
 {
@@ -163,6 +263,11 @@ extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* a
 	solver->dpc.setup(dpc);
 	solver->epc.setup(epc);
 	solver->fpc.setup(fpc);
+	cudaMemcpy3DParms params = {0};
+	cudaChannelFormatDesc channelDesc;
+
+
+
 #else
 	solver->apc.cudaMatrixcpy(apc,cudaMemcpyHostToDevice);
 	solver->bpc.cudaMatrixcpy(bpc,cudaMemcpyHostToDevice);
@@ -172,12 +277,87 @@ extern "C" void gpu_psolver_init_(long int* PsolvPtr,long int* mesh_ptr,float* a
 	solver->fpc.cudaMatrixcpy(fpc,cudaMemcpyHostToDevice);
 #endif
 
-	solver->gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
+	solver->gpc_copy(gpc);
+
+
 
 
 
 	*PsolvPtr = (long int)solver;
 
+}
+
+__host__
+void PoissonSolver::gpc_copy(float* src)
+{
+#ifdef Texture_Solver
+	cudaMemcpy3DParms params = {0};
+	const textureReference* texRefPtr;
+	cudaChannelFormatDesc channelDesc;
+	CUDA_SAFE_CALL(cudaGetChannelDesc(&channelDesc, gpc));
+
+	CUDA_SAFE_CALL(cudaUnbindTexture(&gpc_t));
+
+
+	// Setup the copy params
+	params.dstArray = gpc;
+	params.srcPtr.ptr = (void**)src;
+	params.srcPtr.pitch = (nthsize+1)*sizeof(float);
+	params.srcPtr.xsize = nthsize+1;
+	params.kind = cudaMemcpyHostToDevice;
+
+	params.srcPtr.ysize = npsisize+1;
+	params.extent = make_cudaExtent( nthsize+1,npsisize+1,5);
+	// Do the copy
+	CUDA_SAFE_CALL(cudaMemcpy3D(&params));
+
+	CUDA_SAFE_CALL(cudaGetChannelDesc(&channelDesc, gpc));
+
+	// Bind the cudaArray to the texture reference
+	CUDA_SAFE_CALL(cudaBindTextureToArray(&gpc_t, gpc, &channelDesc));
+
+
+
+#else
+	gpc.cudaMatrixcpy(src,cudaMemcpyHostToDevice);
+
+#endif
+
+}
+
+__host__
+void PoissonSolver::phi_copy(float* src)
+{
+	#ifdef TEXTURE_PHI
+	cudaMemcpy3DParms params = {0};
+	cudaChannelFormatDesc channelDesc;
+
+	CUDA_SAFE_CALL(cudaUnbindTexture(&phi_t));
+
+
+	// Setup the copy params
+	params.dstArray = phi;
+	params.srcPtr.ptr = (void**)src;
+	params.srcPtr.pitch = (nrsize+1)*sizeof(float);
+	params.srcPtr.xsize = nrsize+1;
+	params.kind = cudaMemcpyHostToDevice;
+
+	params.srcPtr.ysize = nthsize+1;
+	params.extent = make_cudaExtent( nrsize+1,nthsize+1,npsisize+1);
+	// Do the copy
+	CUDA_SAFE_CALL(cudaMemcpy3D(&params));
+
+	CUDA_SAFE_CALL(cudaGetChannelDesc(&channelDesc, phi));
+
+	// Bind the cudaArray to the texture reference
+	CUDA_SAFE_CALL(cudaBindTextureToArray(&phi_t, phi, &channelDesc));
+
+
+
+	#else
+	phi.cudaMatrixcpy(src,cudaMemcpyHostToDevice);
+
+	#endif
 }
 
 
@@ -195,6 +375,11 @@ void PoissonSolver::allocate(int nrsize_in,int nthsize_in,int npsisize_in)
 	dpc.allocate(nrsize+1,nthsize+1,"dpc");
 	epc.allocate(nrsize+1,nthsize+1,"epc");
 	fpc.allocate(nrsize+1,nthsize+1,"fpc");
+	cudaExtent extent;
+	extent = make_cudaExtent(nthsize+1,npsisize+1,5);
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+
+	CUDA_SAFE_CALL(cudaMalloc3DArray(&gpc,&desc,extent,cudaArrayLayered));
 
 #else
 	apc.cudaMatrix_allocate(nrsize+1,1,1);
@@ -203,11 +388,12 @@ void PoissonSolver::allocate(int nrsize_in,int nthsize_in,int npsisize_in)
 	dpc.cudaMatrix_allocate(nrsize+1,nthsize+1,1);
 	epc.cudaMatrix_allocate(nrsize+1,nthsize+1,1);
 	fpc.cudaMatrix_allocate(nrsize+1,nthsize+1,1);
+	gpc.cudaMatrix_allocate(nthsize+1,npsisize+1,5);
 #endif
 
 
 
-	gpc.cudaMatrix_allocate(nthsize+1,npsisize+1,5);
+
 
 	x.cudaMatrix_allocate(nrsize-1,nthsize+1,npsisize+1);
 //	phi.cudaMatrix_allocate(nrsize+1,nthsize+1,npsisize+1);
@@ -242,8 +428,9 @@ void PoissonSolver::psfree(void)
 	dpc.cudaMatrixFree();
 	epc.cudaMatrixFree();
 	fpc.cudaMatrixFree();
-#endif
 	gpc.cudaMatrixFree();
+#endif
+
 
 
 	x.cudaMatrixFree();
@@ -325,6 +512,8 @@ void texMatrix::setup(float* src)
 
 }
 
+
+/*
 static __inline__ __device__
 void setup_shared(sMatrixf &apcin,sMatrixf &bpcin,sMatrixf &cpcin,
 							    sMatrixf &dpcin,sMatrixf &epcin,sMatrixf &fpcin,
@@ -387,7 +576,7 @@ void atimes_transp_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf res
 	__shared__ sMatrixf x,res,expphi;
 
 	setup_shared(apcs,bpcs,cpcs,dpcs,epcs,fpcs,gpcs,expphi,x,res);
-/*
+
 	// Load all the data into shared memory
 	while((idx < (ndo.x*blockDim.x+2))&&(gidx <= (solver.n1+1)))
 	{
@@ -451,7 +640,7 @@ void atimes_transp_kernels(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf res
 		idx += blockDim.x;
 		gidx = bidx+idx;
 	}
-	*/
+
 
 	// Load all the data into shared memory
 	while((idz < (ndo.z*blockDim.z+2))&&(gidz <= (solver.n3+1)))
@@ -784,7 +973,7 @@ void atimes_kernelc(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 	__shared__ sMatrixf x,res,expphi;
 
 	setup_shared(apcs,bpcs,cpcs,dpcs,epcs,fpcs,gpcs,expphi,x,res);
-/*
+
 	// Load all the data into shared memory
 	while((idx < (ndo.x*blockDim.x+2))&&(gidx <= (solver.n1+1)))
 	{
@@ -848,7 +1037,7 @@ void atimes_kernelc(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 		idx += blockDim.x;
 		gidx = bidx+idx;
 	}
-	*/
+
 
 	// Load all the data into shared memory
 	while((idz < (ATIMES_DOMAIN_DIM+2))&&(gidz <= (solver.n3+1)))
@@ -1288,10 +1477,11 @@ void atimes_kernelc2(PoissonSolver solver, cudaMatrixf xin,cudaMatrixf resin)
 	}
 
 }
+*/
 
 template<int itransp>
 __global__
-void atimes_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
+void atimes_kernel(const PoissonSolver solver,cudaMatrixf x,cudaMatrixf resin)
 {
 	int idx = threadIdx.x+1;
 	int idy = threadIdx.y+1;
@@ -1302,9 +1492,110 @@ void atimes_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
 	int gidx = bidx+idx;
 	int gidy = bidy+idy;
 	int gidz = bidz+idz;
+/*
+	int gthid = threadIdx.x+blockDim.x*blockIdx.x;
+
+	while(gthid < solver.n1*(solver.n2)*solver.n3)
+	{
+		int gidz = gthid/(solver.n1*(solver.n2));
+		int gidy = gthid/solver.n1 - gidz*(solver.n2);
+		int gidx = gthid - solver.n1*(gidy + (solver.n2)*gidz);
+
+		gidx += 1;
+		gidy += 1;
+		gidz += 1;
+		if(gidz <= solver.n3)
+		{
+			int gidzp = gidz+1;
+			int gidzm = gidz-1;
+			if(gidz == 1) gidzm = solver.n3;
+			if(gidz == solver.n3) gidzp = 1;
+
+			//gidy = idy+bidy;
+			if(gidy <= solver.n2)
+			{
+				//gidx = idx+bidx;
+				if(gidx < solver.n1)
+				{
+					switch(itransp)
+					{
+					case 1:
+						if((gidx > 0)&&(gidx <= (solver.n1-3)))
+						{
+							resin(gidx,gidy,gidz) = solver.fbpc(gidx+1+1)*x(gidx+1,gidy,gidz)
+									+ solver.fapc(gidx-1+1)*x(gidx-1,gidy,gidz)
+									+ solver.fdpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
+									+ solver.fcpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
+									+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+									- (solver.ffpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
 
 
+						}
+						else if(gidx == (solver.n1-2))
+						{
+							resin(gidx,gidy,gidz) = ((solver.bpc(gidx+1+1)+solver.gpc(gidy,gidz,0)*solver.fapc(gidx+1+1))*x(gidx+1,gidy,gidz)
+									+ solver.fapc(gidx-1+1)*x(gidx-1,gidy,gidz)
+									+ solver.fdpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
+									+ solver.fcpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
+									+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+									- (solver.ffpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz));
+						}
+						else if(gidx == (solver.n1-1))
+						{
+							resin(gidx,gidy,gidz) = solver.fbpc(gidx+1+1)*x(gidx+1,gidy,gidz)
+									+ solver.fapc(gidx-1+1)*x(gidx-1,gidy,gidz)
+									+ (solver.fdpc(gidx+1,gidy+1)+solver.gpc(gidy+1,gidz,1)*solver.fapc(gidx+1))*x(gidx,gidy+1,gidz)
+									+ (solver.fcpc(gidx+1,gidy-1)+solver.gpc(gidy-1,gidz,2)*solver.fapc(gidx+1))*x(gidx,gidy-1,gidz)
+									+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+									- (solver.ffpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz))-solver.gpc(gidy,gidz,4)*solver.fapc(gidx+1))*x(gidx,gidy,gidz);
+						}
+						break;
+					case 0:
+						if((gidx > 0)&&(gidx <= (solver.n1-2)))
+						{
+							resin(gidx,gidy,gidz) = solver.fapc(gidx+1)*x(gidx+1,gidy,gidz)
+									+ solver.fbpc(gidx+1)*x(gidx-1,gidy,gidz)
+									+ solver.fcpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
+									+ solver.fdpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
+									+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+									- (solver.ffpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+						}
+						else 	if((gidx == (solver.n1-1)))
+						{
+							x(gidx+1,gidy,gidz) = solver.gpc(gidy,gidz,0)*x(gidx-1,gidy,gidz)
+									+ solver.gpc(gidy,gidz,1)*x(gidx,gidy-1,gidz)
+									+ solver.gpc(gidy,gidz,2)*x(gidx,gidy+1,gidz)
+									//+ 0.0f*gpcs(gidy,gidz,3)
+									+ solver.gpc(gidy,gidz,4)*x(gidx,gidy,gidz);
 
+							resin(gidx,gidy,gidz) = solver.fapc(gidx+1)*x(gidx+1,gidy,gidz)
+									+ solver.fbpc(gidx+1)*x(gidx-1,gidy,gidz)
+									+ solver.fcpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
+									+ solver.fdpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
+									+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+									- (solver.ffpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+						}
+						else
+						{
+							resin(gidx,gidy,gidz) = 0;
+						}
+
+						break;
+
+					default:
+						break;
+					}
+
+					//gidx += blockDim.x*gridDim.x;
+				}
+				//gidy += blockDim.y*gridDim.y;
+			}
+			//gidz += blockDim.z*gridDim.z;
+		}
+		gthid += blockDim.x*gridDim.x;
+	}
+
+*/
 
 	// Bulk loop
 	while(gidz <= solver.n3)
@@ -1325,58 +1616,58 @@ void atimes_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
 				case 1:
 					if((gidx > 0)&&(gidx <= (solver.n1-3)))
 					{
-						resin(gidx,gidy,gidz) = solver.bpc(gidx+1+1)*x(gidx+1,gidy,gidz)
-								+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
-								+ solver.dpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
-								+ solver.cpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
-								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+						resin(gidx,gidy,gidz) = solver.fbpc(gidx+1+1)*x(gidx+1,gidy,gidz)
+								+ solver.fapc(gidx-1+1)*x(gidx-1,gidy,gidz)
+								+ solver.fdpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
+								+ solver.fcpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
+								+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.ffpc(gidx+1,gidy)+(solver.fexpphi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
 
 
 					}
 					else if(gidx == (solver.n1-2))
 					{
-						resin(gidx,gidy,gidz) = ((solver.bpc(gidx+1+1)+solver.gpc(gidy,gidz,0)*solver.apc(gidx+1+1))*x(gidx+1,gidy,gidz)
-								+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
-								+ solver.dpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
-								+ solver.cpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
-								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz));
+						resin(gidx,gidy,gidz) = ((solver.fbpc(gidx+1+1)+solver.fgpc(gidy,gidz,0)*solver.fapc(gidx+1+1))*x(gidx+1,gidy,gidz)
+								+ solver.fapc(gidx-1+1)*x(gidx-1,gidy,gidz)
+								+ solver.fdpc(gidx+1,gidy+1)*x(gidx,gidy+1,gidz)
+								+ solver.fcpc(gidx+1,gidy-1)*x(gidx,gidy-1,gidz)
+								+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.ffpc(gidx+1,gidy)+(solver.fexpphi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz));
 					}
 					else if(gidx == (solver.n1-1))
 					{
-						resin(gidx,gidy,gidz) = solver.bpc(gidx+1+1)*x(gidx+1,gidy,gidz)
-								+ solver.apc(gidx-1+1)*x(gidx-1,gidy,gidz)
-								+ (solver.dpc(gidx+1,gidy+1)+solver.gpc(gidy+1,gidz,1)*solver.apc(gidx+1))*x(gidx,gidy+1,gidz)
-								+ (solver.cpc(gidx+1,gidy-1)+solver.gpc(gidy-1,gidz,2)*solver.apc(gidx+1))*x(gidx,gidy-1,gidz)
-								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz))-solver.gpc(gidy,gidz,4)*solver.apc(gidx+1))*x(gidx,gidy,gidz);
+						resin(gidx,gidy,gidz) = solver.fbpc(gidx+1+1)*x(gidx+1,gidy,gidz)
+								+ solver.fapc(gidx-1+1)*x(gidx-1,gidy,gidz)
+								+ (solver.fdpc(gidx+1,gidy+1)+solver.fgpc(gidy+1,gidz,1)*solver.fapc(gidx+1))*x(gidx,gidy+1,gidz)
+								+ (solver.fcpc(gidx+1,gidy-1)+solver.fgpc(gidy-1,gidz,2)*solver.fapc(gidx+1))*x(gidx,gidy-1,gidz)
+								+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.ffpc(gidx+1,gidy)+(solver.fexpphi(gidx+1,gidy,gidz))-solver.fgpc(gidy,gidz,4)*solver.fapc(gidx+1))*x(gidx,gidy,gidz);
 					}
 					break;
 				case 0:
 					if((gidx > 0)&&(gidx <= (solver.n1-2)))
 					{
-						resin(gidx,gidy,gidz) = solver.apc(gidx+1)*x(gidx+1,gidy,gidz)
-								+ solver.bpc(gidx+1)*x(gidx-1,gidy,gidz)
-								+ solver.cpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
-								+ solver.dpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
-								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+						resin(gidx,gidy,gidz) = solver.fapc(gidx+1)*x(gidx+1,gidy,gidz)
+								+ solver.fbpc(gidx+1)*x(gidx-1,gidy,gidz)
+								+ solver.fcpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
+								+ solver.fdpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
+								+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.ffpc(gidx+1,gidy)+(solver.fexpphi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
 					}
 					else 	if((gidx == (solver.n1-1)))
 					{
-						x(gidx+1,gidy,gidz) = solver.gpc(gidy,gidz,0)*x(gidx-1,gidy,gidz)
-								+ solver.gpc(gidy,gidz,1)*x(gidx,gidy-1,gidz)
-								+ solver.gpc(gidy,gidz,2)*x(gidx,gidy+1,gidz)
+						x(gidx+1,gidy,gidz) = solver.fgpc(gidy,gidz,0)*x(gidx-1,gidy,gidz)
+								+ solver.fgpc(gidy,gidz,1)*x(gidx,gidy-1,gidz)
+								+ solver.fgpc(gidy,gidz,2)*x(gidx,gidy+1,gidz)
 								//+ 0.0f*gpcs(gidy,gidz,3)
-								+ solver.gpc(gidy,gidz,4)*x(gidx,gidy,gidz);
+								+ solver.fgpc(gidy,gidz,4)*x(gidx,gidy,gidz);
 
-						resin(gidx,gidy,gidz) = solver.apc(gidx+1)*x(gidx+1,gidy,gidz)
-								+ solver.bpc(gidx+1)*x(gidx-1,gidy,gidz)
-								+ solver.cpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
-								+ solver.dpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
-								+ solver.epc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
-								- (solver.fpc(gidx+1,gidy)+exp(solver.phi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
+						resin(gidx,gidy,gidz) = solver.fapc(gidx+1)*x(gidx+1,gidy,gidz)
+								+ solver.fbpc(gidx+1)*x(gidx-1,gidy,gidz)
+								+ solver.fcpc(gidx+1,gidy)*x(gidx,gidy+1,gidz)
+								+ solver.fdpc(gidx+1,gidy)*x(gidx,gidy-1,gidz)
+								+ solver.fepc(gidx+1,gidy)*(x(gidx,gidy,gidzp)+x(gidx,gidy,gidzm))
+								- (solver.ffpc(gidx+1,gidy)+(solver.fexpphi(gidx+1,gidy,gidz)))*x(gidx,gidy,gidz);
 					}
 					else
 					{
@@ -1399,7 +1690,7 @@ void atimes_kernel(PoissonSolver solver, cudaMatrixf x,cudaMatrixf resin)
 }
 
 __global__
-void asolve_kernel(PoissonSolver solver,cudaMatrixf bin,cudaMatrixf zin)
+void asolve_kernel(const PoissonSolver solver,cudaMatrixf bin,cudaMatrixf zin)
 {
 	int idx = threadIdx.x+1;
 	int idy = threadIdx.y+1;
@@ -1423,15 +1714,15 @@ void asolve_kernel(PoissonSolver solver,cudaMatrixf bin,cudaMatrixf zin)
 			{
 				if(gidx < solver.n1-1)
 				{
-					result = bin(gidx,gidy,gidz)/(-1*solver.fpc(gidx+1,gidy)-exp(solver.phi(gidx+1,gidy,gidz)));
+					result = bin(gidx,gidy,gidz)/(-1*solver.ffpc(gidx+1,gidy)-(solver.fexpphi(gidx+1,gidy,gidz)));
 
 					zin(gidx,gidy,gidz) = result;
 
 				}
 				else if(gidx == solver.n1-1)
 				{
-					result = bin(gidx,gidy,gidz)/((-1*solver.fpc(gidx+1,gidy)-exp(solver.phi(gidx+1,gidy,gidz)))
-							+ solver.apc(gidx+1)*solver.gpc(gidy,gidz,4));
+					result = bin(gidx,gidy,gidz)/((-1*solver.ffpc(gidx+1,gidy)-(solver.fexpphi(gidx+1,gidy,gidz)))
+							+ solver.fapc(gidx+1)*solver.fgpc(gidy,gidz,4));
 
 					zin(gidx,gidy,gidz) = result;
 				}
@@ -1478,6 +1769,40 @@ void setup_res_kernel(PoissonSolver solver)
 	}
 
 }
+
+#ifndef TEXTURE_PHI
+__global__
+void setup_expphi_kernel(PoissonSolver solver)
+{
+	int idx = threadIdx.x;
+	int idy = threadIdx.y;
+	int idz = threadIdx.z;
+	int gidx = blockDim.x*blockIdx.x+idx;
+	int gidy = blockDim.y*blockIdx.y+idy;
+	int gidz = blockDim.z*blockIdx.z+idz;
+
+	gidz = blockDim.z*blockIdx.z+threadIdx.z;
+	while(gidz <= solver.n3+1)
+	{
+
+
+		gidy = blockDim.y*blockIdx.y+idy;
+		while(gidy <= solver.n2+1)
+		{
+			gidx = blockDim.x*blockIdx.x+idx;
+			while(gidx <= solver.n1+1)
+			{
+				solver.phi(gidx,gidy,gidz) = exp(solver.phi(gidx,gidy,gidz));
+
+				gidx += blockDim.x*gridDim.x;
+			}
+			gidy += blockDim.y*gridDim.y;
+		}
+		gidz += blockDim.z*gridDim.z;
+	}
+
+}
+#endif
 
 __global__
 void pppp_kernel(PoissonSolver solver)
@@ -1633,6 +1958,16 @@ void PoissonSolver::setup_res(void)
 
 	CUDA_SAFE_KERNEL((setup_res_kernel<<<cudaGridSize,cudaBlockSize>>>(*this)));
 }
+__host__
+void PoissonSolver::setup_expphi(void)
+{
+	dim3 cudaBlockSize(64,8,1);
+	dim3 cudaGridSize(1,1,n3);
+
+#ifndef TEXTURE_PHI
+	CUDA_SAFE_KERNEL((setup_expphi_kernel<<<cudaGridSize,cudaBlockSize>>>(*this)));
+#endif
+}
 
 __host__
 void PoissonSolver::pppp(void)
@@ -1646,7 +1981,7 @@ void PoissonSolver::pppp(void)
 __host__
 void PoissonSolver::asolve(int n1_in,int n2_in,int n3_in,cudaMatrixf bin, cudaMatrixf zin)
 {
-	dim3 cudaBlockSize(32,8,1);
+	dim3 cudaBlockSize(16,16,1);
 	dim3 cudaGridSize(1,1,1);
 	n1 = n1_in;
 	n2 = n2_in;
@@ -1672,7 +2007,7 @@ void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMa
 	n3 = n3_in;
 
 	if(atimes_shared)
-	{
+	{/*
 		cudaBlockSize.x = 512;
 		cudaBlockSize.y = 1;
 		cudaBlockSize.z = 1;
@@ -1692,13 +2027,14 @@ void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMa
 		default:
 			break;
 		}
-
+	 */
 		//atimes_shared = 0;
 	}
 	else
 	{
-		cudaBlockSize.x = 32;
-		cudaBlockSize.y = 8;
+
+		cudaBlockSize.x = 16;
+		cudaBlockSize.y = 16;
 		cudaBlockSize.z = 1;
 
 		cudaGridSize.x = (n1+cudaBlockSize.x-1)/(cudaBlockSize.x);
@@ -1708,6 +2044,10 @@ void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMa
 		cudaGridSize.x = 1;
 		cudaGridSize.y = 1;
 		cudaGridSize.z = (n3+cudaBlockSize.z-1)/(cudaBlockSize.z);
+
+
+		//cudaBlockSize.x = 256;
+		//cudaGridSize.x = 42;
 
 		CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 		switch(itransp)
@@ -1721,7 +2061,7 @@ void PoissonSolver::atimes(int n1_in,int n2_in,int n3_in,cudaMatrixf xin, cudaMa
 		default:
 			break;
 		}
-		CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
+		//CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
 		//atimes_shared = 1;
 	}
 
@@ -1765,6 +2105,9 @@ void PoissonSolver::cg3D(int n1_in,int n2_in,int n3_in,float tol,int &iter,int i
 	bkden = 0;
 	akden = 0;
 	deltamax = tol*1.5f;
+	CUDA_SAFE_CALL(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+
+	setup_expphi();
 
 	atimes(n1,n2,n3,x,res,0);
 
@@ -1837,8 +2180,8 @@ extern "C" void cg3d_gpu_(long int* solverPtr,float* phi,int* lbcg,int* n1,int* 
 
 	solver = ((PoissonSolver*)(*solverPtr));
 
-	solver -> phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
-	solver -> gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
+	solver -> phi_copy(phi);
+	solver -> gpc_copy(gpc);
 
 	solver -> x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
 	solver -> b.cudaMatrixcpy(bin,cudaMemcpyHostToDevice);

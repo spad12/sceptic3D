@@ -54,7 +54,7 @@ CUDAFORTRAN_FLAGS += -L$(LD_LIBRARY_PATH) -L/usr/local/cuda/lib64 -lcudart -lcud
 
 
 
-NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -ftz=true -prec-div=false -prec-sqrt=false  -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin $(CC) $(CUDA_INCLUDE_PATH) 
+NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3 -use_fast_math -ftz=true -prec-div=false -prec-sqrt=false -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin $(CC) $(CUDA_INCLUDE_PATH) 
 #NVCCFLAGS	:=  -m64 -O3 -Xptxas -O3  -Xptxas -maxrregcount=40 -gencode arch=compute_20,code=sm_20 --ptxas-options=-v -ccbin /opt/intel/Compiler/11.1/073/bin/intel64/icc -Xcompiler -fast $(CUDA_INCLUDE_PATH) 
 
 NVCC +=  $(NVCCFLAGS) #-L/home/josh/lib -lcutil_x86_64
@@ -152,7 +152,7 @@ OBJ += orbitinject.o \
        maxreinject.o
        
 # Objects for GPU testing
-OBJ += gpu_psolve_tests.o \
+#OBJ += gpu_psolve_tests.o \
 		 gpu_tests.o
 
 # Objects for HDF version of sceptic3D
@@ -230,11 +230,17 @@ fvinject.o : fvinject.f fvcom.f piccom.f errcom.f
 	
 %.o : %.cu
 	$(NVCC) -c $*.cu
+	
+gnuplot_i.o : /home/josh/CUDA/gnuplot_c/src/gnuplot_i.c
+	$(CPP) -c /home/josh/CUDA/gnuplot_c/src/gnuplot_i.c
+
+%.o : %.c
+	$(CC) -c $*.c
 
 % : %.f
 	$(G77) -o $* $(OPTCOMP) $*.f $(LIB)
 
-% : %.F
+% : %.Fgmake 
 	$(G77) -o $* $(OPTCOMP) $*.F $(LIB)
 
 

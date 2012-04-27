@@ -1,3 +1,5 @@
+#ifndef XPLIST_CUH
+#define XPLIST_CUH
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
@@ -27,6 +29,8 @@
 
 #define MAX_SMEM_PER_C2MESH 6144
 
+#define TEXTURE_PHI
+
 __constant__ float pi_const = 3.1415927;
 __constant__ int cells_per_bin = 8;
 
@@ -38,6 +42,7 @@ extern "C" __host__
 void xplist_transpose_(long int* xplist_d,
 									   float* xplist_h,float* dt_prec,float* vzinit,int* ipf,
 									   int* npartmax,int* ndims,int* direction,int* xpdata_only);
+
 
 
 class Particlebin
@@ -69,7 +74,12 @@ public:
 	int lat0,lap0;
 
 	// Mesh arrays
+#ifdef TEXTURE_PHI
+	cudaArray* phi;
+#else
 	cudaMatrixf phi;
+#endif
+
 	cudaMatrixf phiaxis;
 	cudaMatrixf rho;
 	cudaMatrixf rhoDiag;
@@ -98,26 +108,38 @@ public:
 	int nbins;
 	Particlebin* bins;
 
+	float* rmesh_h2;
+	float* thetamesh_h2;
+	float* psimesh_h2;
+
 	cudaMatrixf psum; // psum(1:nrsize-1,1:nthsize-1,1:npsisize-1)
 
 
 	template<int doih>
 	__device__
-	float4 ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap);
+	float4 ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap)const;
 
 	__device__
-	int interppsi(float sp,float cp,float* pf);
+	int interppsi(float sp,float cp,float* pf)const;
 	__device__
-	int interpth(float ct,float* thf);
+	int interpth(float ct,float* thf)const;
 	__device__
-	int interpr(float rp,float* rf);
+	int interpr(float rp,float* rf)const;
 	__device__
-	float3 getaccel(float px,float py,float pz);
+	float3 getaccel(float px,float py,float pz)const;
 	__device__
-	int boundary_intersection(float px1,float py1,float pz1,float& px2,float& py2,float& pz2);
+	int boundary_intersection(float px1,float py1,float pz1,float& px2,float& py2,float& pz2)const;
 
 	 __device__
-	void probe_diags(float3 pin, float3 vin);
+	void probe_diags(float3 pin, float3 vin)const;
+
+	 __host__
+	 void phi_copy(float* src);
+
+	 __device__
+	 float	get_phi(const int& gidx,const int& gidy, const int& gidz)const;
+
+
 };
 
 
@@ -186,7 +208,7 @@ public:
 };
 
 #define nfloats_XPlist 9
-#define nints_XPlist 3
+#define nints_XPlist 2
 class XPlist
 {
 public:
@@ -230,7 +252,7 @@ public:
 	void advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,int &reinject_counter);
 
 	 __device__
-	void move(Mesh_data* mesh,float3 &pout,float3 &vout,float dtin,int gidx);
+	void move(const Mesh_data* mesh,float3 &pout,float3 &vout,float dtin,int gidx);
 
 	__host__
 	void free(void)
@@ -240,7 +262,7 @@ public:
 			CUDA_SAFE_CALL(cudaFree(*get_float_ptr(i)));
 		}
 
-		for(int i=0;i<3;i++)
+		for(int i=0;i<nints_XPlist;i++)
 		{
 			CUDA_SAFE_CALL(cudaFree(*get_int_ptr(i)));
 		}
@@ -251,8 +273,10 @@ public:
 
 
 
+extern "C" __host__
+void plot_particle_bins(Mesh_data mesh,int3 ncells);
 
-__inline__ __device__
+__inline__ __device__ __host__
 int zorder(int ix,int iy,int iz)
 {
 	// Spread the bits of each index
@@ -304,9 +328,9 @@ int** XPlist::get_int_ptr(int i)
 	int** result;
 	switch(i)
 	{
-	case 0: result = &ipf; break;
+	case 0: result = &didileave; break;
 	case 1: result = &particle_id; break;
-	case 2: result = &didileave; break;
+	case 2: result = &ipf; break;
 	default:
 		break;
 	}
@@ -343,7 +367,7 @@ void XPlist::calc_binid(Mesh_data* mesh,int3 ncells,int idx)
 }
 
 __inline__ __device__
-void XPlist::move(Mesh_data* mesh,float3 &pout,float3 &vout,float dtin,int gidx)
+void XPlist::move(const Mesh_data* mesh,float3 &pout,float3 &vout,float dtin,int gidx)
 {
 	float dtnow,dt;
 	float sd,sB;
@@ -470,6 +494,7 @@ uint3 Particlebin::get_bin_position(int3 ncells)
 template<int doih>
 __inline__ __device__
 float4 Mesh_data::ptomesh(float x, float y, float z,int4* icell,float4* cellf,float &zetap)
+const
 {
 	float4 ang;
 	float rsp,rp,hf,hp;
@@ -530,6 +555,7 @@ float4 Mesh_data::ptomesh(float x, float y, float z,int4* icell,float4* cellf,fl
 
 __inline__ __device__
 int Mesh_data::interppsi(float sp,float cp,float* pf)
+const
 {
 	int ipl;
 	float psi;
@@ -563,6 +589,7 @@ int Mesh_data::interppsi(float sp,float cp,float* pf)
 
 __inline__ __device__
 int Mesh_data::interpth(float ct,float* thf)
+const
 {
 	int ithl;
 
@@ -604,6 +631,7 @@ int Mesh_data::interpth(float ct,float* thf)
 
 __inline__ __device__
 int Mesh_data::interpr(float rp,float* rf)
+const
 {
 	int irl;
 
@@ -631,6 +659,7 @@ int Mesh_data::interpr(float rp,float* rf)
 
 __inline__ __device__
 int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,float& py2,float& pz2)
+const
 {
 	// Return the position where the track intersects either the probe or the outer boundary
 
@@ -721,14 +750,17 @@ int Mesh_data::boundary_intersection(float px1,float py1,float pz1,float& px2,fl
 
 __inline__ __device__
 float3 Mesh_data::getaccel(float px,float py,float pz)
+const
 {
 	int4 icell;
 	float4 cellf;
 	float4 ang;
-	float3 result;
 	float zetap;
-	float rl,rr,pf,rlm1,rf,hf;
-	int ir,irl,ith,ipl,ih,ilm1,ithp1,ithp2,ithm1,iplp1,iplp2,iplm1;
+
+	ang = ptomesh<1>(px,py,pz,&icell,&cellf,zetap);
+
+	float rl,rr,rlm1;
+	int ir,ilm1,ithp1,ithp2,ithm1,iplp1,iplp2,iplm1;
 
     float philm1tt,philm1pt,philm1tp,philm1pp;
     float philm1t,philm1p;
@@ -750,14 +782,10 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
     float phih1tX,phih1pX,phih1mX,phih12X;
 
     //float rp,rsp,ct,st,cp,sp;
-    float &ct = ang.z;
-    float &st = ang.w;
-    float &cp = ang.x;
-    float &sp = ang.y;
 
     float ar,at,ap;
 
-	ang = ptomesh<1>(px,py,pz,&icell,&cellf,zetap);
+
 /*
 	rsp = (px*px+py*py);
 	rp = sqrt(rsp+pz*pz);
@@ -783,49 +811,37 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	ct = max(-1.0,min(1.0,ct));
 */
 
-	cp = ang.x;
-	sp = ang.y;
-	ct = ang.z;
-	st = ang.w;
 
 
-	pf = cellf.z;
-	hf = cellf.w;
-	rf = cellf.x;
-	irl = icell.x;
 
+	ir = icell.w+1;
 
-	ih = icell.w;
-	ith = icell.y;
-	ipl = icell.z;
-	ir = ih+1;
-
-	rl = rmesh(ih);
-	ilm1 = ih-1;
+	rl = rmesh(icell.w);
+	ilm1 = icell.w-1;
 
 	// Theta indexes
-	ithp1 = ith+1;
-	ithp2 = ith+2;
-	ithm1 = ith-1;
+	ithp1 = icell.y+1;
+	ithp2 = icell.y+2;
+	ithm1 = icell.y-1;
 
 	// Psi indexes
-	iplp1 = (ipl%npsiused)+1;
-	iplp2 = ((ipl+1)%npsiused)+1;
-	iplm1 = ((ipl+npsiused-2)%npsiused)+1;
+	iplp1 = (icell.z%npsiused)+1;
+	iplp2 = ((icell.z+1)%npsiused)+1;
+	iplm1 = ((icell.z+npsiused-2)%npsiused)+1;
 
-	// Potential at i=ih
-    phih1tt=phi(ih,ith,ipl);
-    phih1tp=phi(ih,ith,iplp1);
-    phih1tm=phi(ih,ith,iplm1);
-    phih1t2=phi(ih,ith,iplp2);
-    phih1pt=phi(ih,ithp1,ipl);
-    phih1pp=phi(ih,ithp1,iplp1);
-    phih1pm=phi(ih,ithp1,iplm1);
-    phih1p2=phi(ih,ithp1,iplp2);
-    phih1mt=phi(ih,ithm1,ipl);
-    phih1mp=phi(ih,ithm1,iplp1);
-    phih12t=phi(ih,ithp2,ipl);
-    phih12p=phi(ih,ithp2,iplp1);
+	// Potential at i=icell.w
+    phih1tt=get_phi(icell.w,icell.y,icell.z);
+    phih1tp=get_phi(icell.w,icell.y,iplp1);
+    phih1tm=get_phi(icell.w,icell.y,iplm1);
+    phih1t2=get_phi(icell.w,icell.y,iplp2);
+    phih1pt=get_phi(icell.w,ithp1,icell.z);
+    phih1pp=get_phi(icell.w,ithp1,iplp1);
+    phih1pm=get_phi(icell.w,ithp1,iplm1);
+    phih1p2=get_phi(icell.w,ithp1,iplp2);
+    phih1mt=get_phi(icell.w,ithm1,icell.z);
+    phih1mp=get_phi(icell.w,ithm1,iplp1);
+    phih12t=get_phi(icell.w,ithp2,icell.z);
+    phih12p=get_phi(icell.w,ithp2,iplp1);
 
     phih1t=phih1tp*cellf.z+phih1tt*(1-cellf.z);
     phih1p=phih1pp*cellf.z+phih1pt*(1-cellf.z);
@@ -833,47 +849,47 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
     phih12=phih12p*cellf.z+phih12t*(1-cellf.z);
 
 
-    float tflin=(acos(ct)-thang(ith))/(thang(ith+1)-thang(ith));
+    float tflin=(acos(ang.z)-thang(icell.y))/(thang(icell.y+1)-thang(icell.y));
 
     phih1tX=phih1pt*tflin +phih1tt*(1-tflin);
     phih1pX=phih1pp*tflin +phih1tp*(1-tflin);
     phih1mX=phih1pm*tflin +phih1tm*(1-tflin);
     phih12X=phih1p2*tflin +phih1t2*(1-tflin);
 
-    if(ih == nr)
+    if(icell.w == nr)
     {
-        phihp1tt=2.0f*phih1tt-phi(ih-1,ith,ipl);
-        phihp1pt=2.0f*phih1pt-phi(ih-1,ithp1,ipl);
-        phihp1mt=2.0f*phih1mt-phi(ih-1,ithm1,ipl);
-        phihp12t=2.0f*phih12t-phi(ih-1,ithp2,ipl);
+        phihp1tt=2.0f*phih1tt-get_phi(icell.w-1,icell.y,icell.z);
+        phihp1pt=2.0f*phih1pt-get_phi(icell.w-1,ithp1,icell.z);
+        phihp1mt=2.0f*phih1mt-get_phi(icell.w-1,ithm1,icell.z);
+        phihp12t=2.0f*phih12t-get_phi(icell.w-1,ithp2,icell.z);
 
-        phihp1tp=2.0f*phih1tp-phi(ih-1,ith,iplp1);
-        phihp1pp=2.0f*phih1pp-phi(ih-1,ithp1,iplp1);
-        phihp1mp=2.0f*phih1mp-phi(ih-1,ithm1,iplp1);
-        phihp12p=2.0f*phih12p-phi(ih-1,ithp2,iplp1);
+        phihp1tp=2.0f*phih1tp-get_phi(icell.w-1,icell.y,iplp1);
+        phihp1pp=2.0f*phih1pp-get_phi(icell.w-1,ithp1,iplp1);
+        phihp1mp=2.0f*phih1mp-get_phi(icell.w-1,ithm1,iplp1);
+        phihp12p=2.0f*phih12p-get_phi(icell.w-1,ithp2,iplp1);
 
-        phihp1tm=2.0f*phih1tm-phi(ih-1,ith,iplm1);
-        phihp1pm=2.0f*phih1pm-phi(ih-1,ithp1,iplm1);
+        phihp1tm=2.0f*phih1tm-get_phi(icell.w-1,icell.y,iplm1);
+        phihp1pm=2.0f*phih1pm-get_phi(icell.w-1,ithp1,iplm1);
 
-        phihp1t2=2.0f*phih1t2-phi(ih-1,ith,iplp2);
-        phihp1p2=2.0f*phih1p2-phi(ih-1,ithp1,iplp2);
+        phihp1t2=2.0f*phih1t2-get_phi(icell.w-1,icell.y,iplp2);
+        phihp1p2=2.0f*phih1p2-get_phi(icell.w-1,ithp1,iplp2);
 
-         rr=2*rl-rmesh(ih-1);
+         rr=2*rl-rmesh(icell.w-1);
     }
     else
     {
-        phihp1tt=phi(ir,ith,ipl);
-        phihp1tp=phi(ir,ith,iplp1);
-        phihp1tm=phi(ir,ith,iplm1);
-        phihp1t2=phi(ir,ith,iplp2);
-        phihp1pt=phi(ir,ithp1,ipl);
-        phihp1pp=phi(ir,ithp1,iplp1);
-        phihp1pm=phi(ir,ithp1,iplm1);
-        phihp1p2=phi(ir,ithp1,iplp2);
-        phihp1mt=phi(ir,ithm1,ipl);
-        phihp1mp=phi(ir,ithm1,iplp1);
-        phihp12t=phi(ir,ithp2,ipl);
-        phihp12p=phi(ir,ithp2,iplp1);
+        phihp1tt=get_phi(ir,icell.y,icell.z);
+        phihp1tp=get_phi(ir,icell.y,iplp1);
+        phihp1tm=get_phi(ir,icell.y,iplm1);
+        phihp1t2=get_phi(ir,icell.y,iplp2);
+        phihp1pt=get_phi(ir,ithp1,icell.z);
+        phihp1pp=get_phi(ir,ithp1,iplp1);
+        phihp1pm=get_phi(ir,ithp1,iplm1);
+        phihp1p2=get_phi(ir,ithp1,iplp2);
+        phihp1mt=get_phi(ir,ithm1,icell.z);
+        phihp1mp=get_phi(ir,ithm1,iplp1);
+        phihp12t=get_phi(ir,ithp2,icell.z);
+        phihp12p=get_phi(ir,ithp2,iplp1);
 
         rr=rmesh(ir);
     }
@@ -881,10 +897,10 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 
     // For the radial and theta acceleration, use values of the potential
    // already weighted in the psi direction
-	  phihp1t=phihp1tp*pf+phihp1tt*(1-pf);
-	  phihp1p=phihp1pp*pf+phihp1pt*(1-pf);
-	  phihp1m=phihp1mp*pf+phihp1mt*(1-pf);
-	  phihp12=phihp12p*pf+phihp12t*(1-pf);
+	  phihp1t=phihp1tp*cellf.z+phihp1tt*(1-cellf.z);
+	  phihp1p=phihp1pp*cellf.z+phihp1pt*(1-cellf.z);
+	  phihp1m=phihp1mp*cellf.z+phihp1mt*(1-cellf.z);
+	  phihp12=phihp12p*cellf.z+phihp12t*(1-cellf.z);
 
 //     Theta weighting
 	  phihp1tX=phihp1pt*tflin +phihp1tt*(1-tflin);
@@ -894,52 +910,52 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 
 	  if(debyelen < 1.0e-2f)
 	  {
-		  if(ih == 1)
+		  if(icell.w == 1)
 		  {
-	            philm1tt=2.0f*phi(irl,ith,ipl)-phi(ir,ith,ipl);
-	            philm1pt=2.0f*phi(irl,ithp1,ipl)-phi(ir,ithp1,ipl);
-	            philm1tp=2.0f*phi(irl,ith,iplp1)-phi(ir,ith,iplp1);
-	            philm1pp=2.0f*phi(irl,ithp1,iplp1)-phi(ir,ithp1,iplp1);
+	            philm1tt=2.0f*get_phi(icell.x,icell.y,icell.z)-get_phi(ir,icell.y,icell.z);
+	            philm1pt=2.0f*get_phi(icell.x,ithp1,icell.z)-get_phi(ir,ithp1,icell.z);
+	            philm1tp=2.0f*get_phi(icell.x,icell.y,iplp1)-get_phi(ir,icell.y,iplp1);
+	            philm1pp=2.0f*get_phi(icell.x,ithp1,iplp1)-get_phi(ir,ithp1,iplp1);
 
 	            rlm1=2.0f*rl - rr;
 		  }
 		  else
 		  {
-	            philm1tt=phi(ilm1,ith,ipl);
-	            philm1pt=phi(ilm1,ithp1,ipl);
-	            philm1tp=phi(ilm1,ith,iplp1);
-	            philm1pp=phi(ilm1,ithp1,iplp1);
+	            philm1tt=get_phi(ilm1,icell.y,icell.z);
+	            philm1pt=get_phi(ilm1,ithp1,icell.z);
+	            philm1tp=get_phi(ilm1,icell.y,iplp1);
+	            philm1pp=get_phi(ilm1,ithp1,iplp1);
 	            rlm1=rmesh(ilm1);
 		  }
 
-		 philm1t=philm1tp*pf+philm1tt*(1.0f-pf);
-		 philm1p=philm1pp*pf+philm1pt*(1.0f-pf);
+		 philm1t=philm1tp*cellf.z+philm1tt*(1.0f-cellf.z);
+		 philm1p=philm1pp*cellf.z+philm1pt*(1.0f-cellf.z);
 
 		  if(zetap <= 1.0e-2f) zetap = 1.0e-2f;
 
-	      ar = (  ( (phihp1t-phih1t)/(zeta(ir)-zeta(ih))*hf +
-	             (phih1t-philm1t)/(zeta(ih)-zeta(ilm1))*(1.0f-hf))*(1.0f-tflin)
-	             + ( (phihp1p-phih1p)/(zeta(ir)-zeta(ih))*hf +
-	             (phih1p-philm1p)/(zeta(ih)-zeta(ilm1))*(1.0f-hf))*tflin )/zetap;
+	      ar = (  ( (phihp1t-phih1t)/(zeta(ir)-zeta(icell.w))*cellf.w +
+	             (phih1t-philm1t)/(zeta(icell.w)-zeta(ilm1))*(1.0f-cellf.w))*(1.0f-tflin)
+	             + ( (phihp1p-phih1p)/(zeta(ir)-zeta(icell.w))*cellf.w +
+	             (phih1p-philm1p)/(zeta(icell.w)-zeta(ilm1))*(1.0f-cellf.w))*tflin )/zetap;
 
 
 
 	  }
 	  else
 	  {
-	         philm1tt=phi(ilm1,ith,ipl);
-	         philm1pt=phi(ilm1,ithp1,ipl);
-	         philm1tp=phi(ilm1,ith,iplp1);
-	         philm1pp=phi(ilm1,ithp1,iplp1);
+	         philm1tt=get_phi(ilm1,icell.y,icell.z);
+	         philm1pt=get_phi(ilm1,ithp1,icell.z);
+	         philm1tp=get_phi(ilm1,icell.y,iplp1);
+	         philm1pp=get_phi(ilm1,ithp1,iplp1);
 	         rlm1=rmesh(ilm1);
 
-	         philm1t=philm1tp*pf+philm1tt*(1-pf);
-	         philm1p=philm1pp*pf+philm1pt*(1-pf);
+	         philm1t=philm1tp*cellf.z+philm1tt*(1-cellf.z);
+	         philm1p=philm1pp*cellf.z+philm1pt*(1-cellf.z);
 
-	         ar=(  ( (phihp1t-phih1t)/(rr-rl)*hf +
-	            (phih1t-philm1t)/(rl-rlm1)*(1.0f-hf))*(1.0f-tflin)
-	            +( (phihp1p-phih1p)/(rr-rl)*hf +
-	            (phih1p-philm1p)/(rl-rlm1)*(1.0f-hf))*tflin );
+	         ar=(  ( (phihp1t-phih1t)/(rr-rl)*cellf.w +
+	            (phih1t-philm1t)/(rl-rlm1)*(1.0f-cellf.w))*(1.0f-tflin)
+	            +( (phihp1p-phih1p)/(rr-rl)*cellf.w +
+	            (phih1p-philm1p)/(rl-rlm1)*(1.0f-cellf.w))*tflin );
 	  }
 
 	  ar = -ar;
@@ -947,51 +963,52 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 	  if(tflin <= 0.5f)
 	  {
 	       at= ( (phih1p-phih1t)*(tflin)*2.0f
-	               /(rl*(thang(ithp1)-thang(ith)))
+	               /(rl*(thang(ithp1)-thang(icell.y)))
 	             +(phih1p-phih1m)*(0.5f-tflin)*2.0f
-	               /(rl*(thang(ithp1)-thang(ithm1))) ) * (1.0f-rf)
+	               /(rl*(thang(ithp1)-thang(ithm1))) ) * (1.0f-cellf.x)
 	             + ( (phihp1p-phihp1t)*(tflin)*2.0f
-	               /(rr*(thang(ithp1)-thang(ith)))
+	               /(rr*(thang(ithp1)-thang(icell.y)))
 	             +(phihp1p-phihp1m)*(0.5f-tflin)*2.0f
-	               /(rr*(thang(ithp1)-thang(ithm1))) ) * rf;
+	               /(rr*(thang(ithp1)-thang(ithm1))) ) * cellf.x;
 	  }
 	  else
 	  {
 	         at= ( (phih12-phih1t)*(tflin-0.5f)*2.0f
-	               /(rl*(thang(ithp2)-thang(ith)))
+	               /(rl*(thang(ithp2)-thang(icell.y)))
 	             +(phih1p-phih1t)*(1.0f-tflin)*2.0f
-	               /(rl*(thang(ithp1)-thang(ith))) ) * (1.0f-rf)
+	               /(rl*(thang(ithp1)-thang(icell.y))) ) * (1.0f-cellf.x)
 	             + ( (phihp12-phihp1t)*(tflin-0.5f)*2.0f
-	               /(rr*(thang(ithp2)-thang(ith)))
+	               /(rr*(thang(ithp2)-thang(icell.y)))
 	             +(phihp1p-phihp1t)*(1.0f-tflin)*2.0f
-	               /(rr*(thang(ithp1)-thang(ith))) ) * rf;
+	               /(rr*(thang(ithp1)-thang(icell.y))) ) * cellf.x;
 	  }
 
 	  at = -at;
 
 	  if(lat0) at = 0;
 
-	  if(pf<=0.5f)
+	  if(cellf.z<=0.5f)
 	  {
-	         ap= ( (phih1pX-phih1tX)*(pf)*2./rl +0.5f*(phih1pX-phih1mX)*(0.5f
-	             -pf)*2.0f/rl ) * (1.0f-rf) + ( (phihp1pX-phihp1tX)*(pf)*2.0f/rr
-	             +0.5f*(phihp1pX-phihp1mX)*(0.5f-pf)*2.0f/rr ) * rf;
+	         ap= ( (phih1pX-phih1tX)*(cellf.z)*2.0f/rl +0.5f*(phih1pX-phih1mX)*(0.5f
+	             -cellf.z)*2.0f/rl ) * (1.0f-cellf.x) + ( (phihp1pX-phihp1tX)*(cellf.z)*2.0f/rr
+	             +0.5f*(phihp1pX-phihp1mX)*(0.5f-cellf.z)*2.0f/rr ) * cellf.x;
 	  }
 	  else
 	  {
-	         ap= ( 0.5f*(phih12X-phih1tX)*(pf-0.5f)*2.0f/rl +(phih1pX-phih1tX)
-	             *(1.0f-pf)*2.0f/rl ) * (1.0f-rf) + ( 0.5f*(phihp12X-phihp1tX)*(pf
-	             -0.5f)*2.0f/rr +(phihp1pX-phihp1tX)*(1.0f-pf)*2.0f/rr ) * rf;
+	         ap= ( 0.5f*(phih12X-phih1tX)*(cellf.z-0.5f)*2.0f/rl +(phih1pX-phih1tX)
+	             *(1.0f-cellf.z)*2.0f/rl ) * (1.0f-cellf.x) + ( 0.5f*(phihp12X-phihp1tX)*(cellf.z
+	             -0.5f)*2.0f/rr +(phihp1pX-phihp1tX)*(1.0f-cellf.z)*2.0f/rr ) * cellf.x;
 	  }
 
-	  ap=-ap/(st*dpsi+1.0e-7f);
+	  ap=-ap/(ang.w*dpsi+1.0e-7f);
 
 	  if(lap0) ap=0.0;
 
 	  // 3D acceleration
-	  result.z = ar*ct - at*st;
-	  result.y = (ar*st+at*ct)*sp+ap*cp;
-	  result.x = (ar*st+at*ct)*cp-ap*sp;
+	  float3 result;
+	  result.z = ar*ang.z - at*ang.w;
+	  result.y = (ar*ang.w+at*ang.z)*ang.y+ap*ang.x;
+	  result.x = (ar*ang.w+at*ang.z)*ang.x-ap*ang.y;
 /*
 	  bool Excessive_Accel;
 
@@ -1035,6 +1052,7 @@ float3 Mesh_data::getaccel(float px,float py,float pz)
 
 __inline__ __device__
 void Mesh_data::probe_diags(float3 pin, float3 vin)
+const
 {
 	float4 cellfractions;
 	int4 my_cell;
@@ -1054,30 +1072,30 @@ void Mesh_data::probe_diags(float3 pin, float3 vin)
 	my_cell.z -= 1;
 
 	frac = (1.0f-cellfractions.y)*(1.0f-cellfractions.z);
-	atomicAdd(&nincell(my_cell.y,my_cell.z),frac);
-	atomicAdd(&vrincell(my_cell.y,my_cell.z),frac*vr);
-	atomicAdd(&vr2incell(my_cell.y,my_cell.z),frac*vr2);
+	atomicAdd((float*)&nincell(my_cell.y,my_cell.z),frac);
+	atomicAdd((float*)&vrincell(my_cell.y,my_cell.z),frac*vr);
+	atomicAdd((float*)&vr2incell(my_cell.y,my_cell.z),frac*vr2);
 
 	frac = (cellfractions.y)*(1.0f-cellfractions.z);
-	atomicAdd(&nincell(my_cell.y+1,my_cell.z),frac);
-	atomicAdd(&vrincell(my_cell.y+1,my_cell.z),frac*vr);
-	atomicAdd(&vr2incell(my_cell.y+1,my_cell.z),frac*vr2);
+	atomicAdd((float*)&nincell(my_cell.y+1,my_cell.z),frac);
+	atomicAdd((float*)&vrincell(my_cell.y+1,my_cell.z),frac*vr);
+	atomicAdd((float*)&vr2incell(my_cell.y+1,my_cell.z),frac*vr2);
 
 	if(my_cell.z == npsi-1) my_cell.z = -1;
 
 	frac = (1.0f-cellfractions.y)*(cellfractions.z);
-	atomicAdd(&nincell(my_cell.y,my_cell.z+1),frac);
-	atomicAdd(&vrincell(my_cell.y,my_cell.z+1),frac*vr);
-	atomicAdd(&vr2incell(my_cell.y,my_cell.z+1),frac*vr2);
+	atomicAdd((float*)&nincell(my_cell.y,my_cell.z+1),frac);
+	atomicAdd((float*)&vrincell(my_cell.y,my_cell.z+1),frac*vr);
+	atomicAdd((float*)&vr2incell(my_cell.y,my_cell.z+1),frac*vr2);
 
 	frac = (cellfractions.y)*(cellfractions.z);
-	atomicAdd(&nincell(my_cell.y+1,my_cell.z+1),frac);
-	atomicAdd(&vrincell(my_cell.y+1,my_cell.z+1),frac*vr);
-	atomicAdd(&vr2incell(my_cell.y+1,my_cell.z+1),frac*vr2);
+	atomicAdd((float*)&nincell(my_cell.y+1,my_cell.z+1),frac);
+	atomicAdd((float*)&vrincell(my_cell.y+1,my_cell.z+1),frac*vr);
+	atomicAdd((float*)&vr2incell(my_cell.y+1,my_cell.z+1),frac*vr2);
 }
 
 
-
+#endif /* XPLIST_CUH */
 
 
 

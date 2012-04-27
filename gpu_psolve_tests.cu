@@ -47,7 +47,7 @@ extern "C" void asolve_test_(long int* solverPtr,float* phi,float* bin,float* zi
 	//z_d.cudaMatrixcpy(zin,cudaMemcpyHostToDevice);
 	//z_d.cudaMatrixcpy(z_cpu,cudaMemcpyDeviceToHost);
 	solver->phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
-	solver -> gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
+	solver -> gpc_copy(gpc);
 
 	// Do cpu asolve
 	asolve_(*n1,*n2,*n3,b_cpu,z_cpu,&zerror);
@@ -136,7 +136,7 @@ extern "C" void atimes_test_(long int* solverPtr,float* phi,float* xin,float* re
 	solver->phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
 	solver->x.cudaMatrixcpy(xin,cudaMemcpyHostToDevice);
 	solver->x.cudaMatrixcpy(x_cpu,cudaMemcpyDeviceToHost);
-	solver->gpc.cudaMatrixcpy(gpc,cudaMemcpyHostToDevice);
+	solver -> gpc_copy(gpc);
 
 
 	// Do cpu atimes

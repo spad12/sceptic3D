@@ -30,7 +30,7 @@
     } }
 
 
-//#define Texture_Solver
+#define Texture_Solver
 
 #define ATIMES_BLOCK_SIZE 256
 
@@ -60,7 +60,7 @@ public:
 	__host__
 	void setup(float* src);
 
-
+/*
 	__device__
 	float operator()(int ix,int iy)
 	{
@@ -72,6 +72,7 @@ public:
 	{
 		return fetchFunction(ix,0);
 	}
+	*/
 
 	__host__
 	void texMatrixFree(void)
@@ -107,14 +108,21 @@ public:
 
 #ifdef Texture_Solver
 	texMatrix apc,bpc,cpc,dpc,epc,fpc;
+	cudaArray* gpc;
+	cudaArray* phi;
+
 #else
 	cudaMatrixf apc,bpc,cpc,dpc,epc,fpc;
-#endif
+
 	cudaMatrixf gpc;
+	cudaMatrixf phi;
+
+#endif
 	cudaMatrixf x;
 	cudaMatrixf b;
 	cudaMatrixf p,z,pp,zz,res,resr;
-	cudaMatrixf phi,phiaxis;
+
+	cudaMatrixf phiaxis;
 	cudaMatrixf rho;
 
 	float* sum_array;
@@ -137,6 +145,8 @@ public:
 	void asolve(int n1,int n2,int n3,cudaMatrixf b_in, cudaMatrixf z_in);
 	__host__
 	void setup_res(void);
+	__host__
+	void setup_expphi(void);
 	__host__
 	void pppp(void);
 
@@ -178,6 +188,32 @@ public:
 
 		return abs(delta);
 	}
+
+	__device__
+	float fapc(int gidx)const;
+	__device__
+	float fbpc(int gidx)const;
+	__device__
+	float fcpc(int gidx,int gidy)const;
+	__device__
+	float fdpc(int gidx,int gidy)const;
+	__device__
+	float fepc(int gidx,int gidy)const;
+	__device__
+	float ffpc(int gidx,int gidy)const;
+	__device__
+	float fgpc(int gidy,int gidz,int ij)const;
+
+	__device__
+	float fexpphi(const int& gidx,const int& gidy,const int&gidz)const;
+
+	__host__
+	void gpc_copy(float* src);
+
+	__host__
+	void phi_copy(float* src);
+
+
 
 	__host__
 	void psfree(void);

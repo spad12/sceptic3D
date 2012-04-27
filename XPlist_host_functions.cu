@@ -2,14 +2,15 @@
  * "This software contains source code provided by NVIDIA Corporation."
  */
 #include "XPlist.cuh"
-
 #include "gpu_timing.cuh"
 //__constant__ int ncells_per_binr_d;
 //__constant__ int ncells_per_binth_d;
 //__constant__ int ncells_per_binpsi_d;
 
 
-
+#ifdef TEXTURE_PHI
+texture<float,cudaTextureType3D,cudaReadModeElementType> phi_t;
+#endif
 
 #define SORT_BLOCK_SIZE 512
 #define SORT_NPTCLS_PER_THREAD 4
@@ -37,6 +38,8 @@ int nptclstotal;
 int nsorts = 0;
 int nchargeassign = 0;
 int npadvnc = 0;
+
+int current_step = 0;
 
 
 extern "C" void start_timer_(uint* timer)
@@ -72,6 +75,8 @@ extern "C" void get_times_(uint* timer)
 
 	cutDeleteTimer(*timer);
 }
+
+
 
 
 __host__
@@ -232,7 +237,7 @@ void XPlist::sort(Particlebin* bins)
 		buffer = idata;
 
 	}
-
+/*
 	for(int i=0;i<1;i++)
 	{
 		float* idata = (float*)(*(get_int_ptr(i)));
@@ -244,6 +249,7 @@ void XPlist::sort(Particlebin* bins)
 		*(get_int_ptr(i)) = (int*)odata;
 		buffer = idata;
 	}
+	*/
 #ifdef PROFILE_TIMERS
 	g_timers[reorder_pdata].stop_timer();
 	int find_bin_boundaries_timer = get_timer_int("find_bin_boundaries");
@@ -282,8 +288,6 @@ void find_cell_index_kernel(XPlist particles,Mesh_data mesh,int3 ncells)
 		block_start += blockDim.x;
 	}
 }
-
-
 
 extern "C" __host__
 void xplist_sort_(long int* XP_ptr,long int* mesh_ptr,int* istep)
@@ -328,6 +332,12 @@ void xplist_sort_(long int* XP_ptr,long int* mesh_ptr,int* istep)
 	cutDeleteTimer( timer);
 #endif
 
+
+
+	//if(*istep == 10)
+	//{
+	//	plot_particle_bins(mesh_d,ncells_per_bin_g);
+	//}
 }
 
 
@@ -347,7 +357,10 @@ void write_to_nodes(float* data_out,float data_in,float4 cellf,int3 ncells)
 			for(int k=0;k<2;k++)
 			{
 				my_node = data_out+i+bindimr*(j+bindimth*k);
-				weighted_data = (((1.0f-i)+(2*i-1)*cellf.x)*((1.0f-j)+(2*j-1)*cellf.y)*((1.0f-k)+(2*k-1)*cellf.z))*data_in;
+				weighted_data = (((1.0f-i)+(2*i-1)*cellf.x)*
+						((1.0f-j)+(2*j-1)*cellf.y)*
+						((1.0f-k)+(2*k-1)*cellf.z))*
+						data_in;
 
 				atomicAdd(my_node,weighted_data);
 
@@ -559,15 +572,63 @@ extern "C" void gpu_chargeassign_(long int* XP_ptr,long int* mesh_ptr,float* psu
 
 }
 
+__inline__ __device__
+float	Mesh_data::get_phi(const int& gidx,const int& gidy, const int& gidz)
+const
+{
+#ifdef TEXTURE_PHI
+	 return tex3D(phi_t,gidx,gidy,gidz);
+#else
+	 return phi(gidx,gidy,gidz);
+#endif
+
+}
+
+__host__
+void Mesh_data::phi_copy(float* src)
+{
+	#ifdef TEXTURE_PHI
+	cudaMemcpy3DParms params = {0};
+	cudaChannelFormatDesc channelDesc;
+
+	CUDA_SAFE_CALL(cudaUnbindTexture(&phi_t));
+
+
+	// Setup the copy params
+	params.dstArray = phi;
+	params.srcPtr.ptr = (void**)src;
+	params.srcPtr.pitch = (nrfull+1)*sizeof(float);
+	params.srcPtr.xsize = nrfull+1;
+	params.kind = cudaMemcpyHostToDevice;
+
+	params.srcPtr.ysize = nthfull+1;
+	params.extent = make_cudaExtent( nrfull+1,nthfull+1,npsifull+1);
+	// Do the copy
+	CUDA_SAFE_CALL(cudaMemcpy3D(&params));
+
+	CUDA_SAFE_CALL(cudaGetChannelDesc(&channelDesc, phi));
+
+	// Bind the cudaArray to the texture reference
+	CUDA_SAFE_CALL(cudaBindTextureToArray(&phi_t, phi, &channelDesc));
+
+
+
+	#else
+	phi.cudaMatrixcpy(src,cudaMemcpyHostToDevice);
+
+	#endif
+}
+
 __global__
-void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float dtin)
+void xplist_advance_kernel(XPlist particles,const Mesh_data mesh,XPdiags diags,float dtin)
 {
 	int idx = threadIdx.x;
 	int gidx;
 	int block_start = blockIdx.x*blockDim.x*PADVNC_NPTCLS_PER_THREAD;
 
 	// Time step stuff
-	float3 ptemp,vtemp;
+	__shared__ float3 ptemp[PADVANCE_BLOCK_SIZE];
+	__shared__ float3 vtemp[PADVANCE_BLOCK_SIZE];
 	float rt,vr2;
 	int didileave;
 
@@ -596,14 +657,14 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 		if(gidx < particles.nptcls)
 		{
 			// Advance the particles
-			particles.move(&mesh,ptemp,vtemp,dtin,gidx);
+			particles.move(&mesh,ptemp[idx],vtemp[idx],dtin,gidx);
 
 			// Now we need to see if we left the computational domain
 			didileave = mesh.boundary_intersection(particles.px[gidx],particles.py[gidx],particles.pz[gidx],
-															ptemp.x,ptemp.y,ptemp.z);
+															ptemp[idx].x,ptemp[idx].y,ptemp[idx].z);
 
-			rt = ptemp.x*ptemp.x+ptemp.y*ptemp.y+ptemp.z*ptemp.z;
-			vr2 = vtemp.x*vtemp.x+vtemp.y*vtemp.y+vtemp.z*vtemp.z;
+			rt = ptemp[idx].x*ptemp[idx].x+ptemp[idx].y*ptemp[idx].y+ptemp[idx].z*ptemp[idx].z;
+			vr2 = vtemp[idx].x*vtemp[idx].x+vtemp[idx].y*vtemp[idx].y+vtemp[idx].z*vtemp[idx].z;
 
 			if(didileave)
 			{
@@ -611,20 +672,20 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 				{
 					//dtl = sqrt((pow(particles.px[gidx]-ptemp.x,2)+pow(particles.py[gidx]-ptemp.y,2)+pow(particles.pz[gidx]-ptemp.z,2))/vr2);
 
-					mesh.probe_diags(ptemp,vtemp);
+					mesh.probe_diags(ptemp[idx],vtemp[idx]);
 
-					atomicAdd(&momprobe.x,vtemp.x);
-					atomicAdd(&momprobe.y,vtemp.y);
-					atomicAdd(&momprobe.z,vtemp.z);
+					atomicAdd(&momprobe.x,vtemp[idx].x);
+					atomicAdd(&momprobe.y,vtemp[idx].y);
+					atomicAdd(&momprobe.z,vtemp[idx].z);
 					atomicAdd(&momprobe.w,0.5f*vr2);
 					atomicAdd(&ninner,1);
 
 				}
 				else
 				{
-					atomicAdd(&momout.x,-vtemp.x);
-					atomicAdd(&momout.y,-vtemp.y);
-					atomicAdd(&momout.z,-vtemp.z);
+					atomicAdd(&momout.x,-vtemp[idx].x);
+					atomicAdd(&momout.y,-vtemp[idx].y);
+					atomicAdd(&momout.z,-vtemp[idx].z);
 
 				}
 			}
@@ -632,12 +693,12 @@ void xplist_advance_kernel(XPlist particles,Mesh_data mesh,XPdiags diags,float d
 
 			// For now we'll just use half of the original time step as the time step for new particles
 			particles.dt_prec[gidx] = dtin*(1-didileave);
-			particles.px[gidx] = ptemp.x;
-			particles.py[gidx] = ptemp.y;
-			particles.pz[gidx] = ptemp.z;
-			particles.vx[gidx] = vtemp.x;
-			particles.vy[gidx] = vtemp.y;
-			particles.vz[gidx] = vtemp.z;
+			particles.px[gidx] = ptemp[idx].x;
+			particles.py[gidx] = ptemp[idx].y;
+			particles.pz[gidx] = ptemp[idx].z;
+			particles.vx[gidx] = vtemp[idx].x;
+			particles.vy[gidx] = vtemp[idx].y;
+			particles.vz[gidx] = vtemp[idx].z;
 			particles.didileave[gidx] = didileave;
 
 			particles.particle_id[gidx] = gidx;
@@ -736,6 +797,7 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 	// Move the particles
 	//printf("Moving the particles on the gpu\n");
 	cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+	cudaDeviceSynchronize();
 #ifdef PROFILE_TIMERS
 	int my_timer = get_timer_int("xplist_advance_kernel");
 	g_timers[my_timer].start_timer();
@@ -782,7 +844,7 @@ void XPlist::advance(Mesh_data mesh,XPdiags diags,float* reinjlist_h,float dt,in
 		xplist_transpose_(&Reinj_ptr,reinjlist_h+reinject_counter*6,dt_prec_dum,vzinit_dum,ipf_dum,&nptcls_left,&ndims,&direction,&xpdata_only);
 
 		reinject_counter += nptcls_left;
-		cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+		//cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
 		// Copy dt_prec's of the particles that exited the grid
 		((scan_condense<<<cudaGridSize,cudaBlockSize>>>
 									 (new_particles.dt_prec,dt_prec,didileave,didileave,nptcls)));
@@ -856,7 +918,7 @@ extern "C" void gpu_padvnc_(long int* XP_ptr,long int* mesh_ptr,
 	XPdiags diags_d(1);
 
 	// Copy the potential to the gpu
-	mesh_d.phi.cudaMatrixcpy(phi,cudaMemcpyHostToDevice);
+	mesh_d.phi_copy(phi);
 
 	// Reset Diagnostic Arrays
 	mesh_d.nincell.cudaMatrixSet(0);
